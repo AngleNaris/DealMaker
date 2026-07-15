@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Build artifacts
+build/
+build_*/
+dist/
+dist_*/
+*.spec.bak
+*.manifest
+
+# Binaries (download separately; keep in project locally)
+*.exe
+!officecli.exe.old
+
+# Temp / test outputs
+tmp/
+tmp_*/
+*.log
+_test_*.docx
+_test_*.json
+_batch_cmds.json
+_debug_ph.txt
+test_fix_output.docx
+2026*_*.docx
+
+# Local user data
+.contract_tool/
+
+# Node / Tauri
+app/node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+.cursor/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
