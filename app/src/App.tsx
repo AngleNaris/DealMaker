@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Button, DetailLabel, FieldGrid, HintLabel, InfoCard, SectionTitle, TextField, WarnLabel } from "./components/ui";
 import {
   amountToChinese,
   amountsEqual,
@@ -12,7 +11,7 @@ import * as api from "./lib/api";
 
 const APP_VERSION = "2.0.0";
 
-type FieldDef = { key: string; label: string; placeholder: string };
+type FieldDef = { key: string; label: string; placeholder: string; pick?: "image" };
 type GroupDef = { title: string; fields: FieldDef[] };
 
 const FORM_GROUPS: GroupDef[] = [
@@ -38,14 +37,19 @@ const FORM_GROUPS: GroupDef[] = [
   {
     title: "费用信息",
     fields: [
-      { key: "替换的总费用", label: "总费用", placeholder: "输入数字，自动拆分预付/尾款" },
+      { key: "替换的总费用", label: "总费用", placeholder: "输入数字，自动转换大写" },
       { key: "替换的总费用大写", label: "总费用大写", placeholder: "自动转换，也可手动修改" },
       { key: "替换的税率", label: "税率", placeholder: "请输入税率，如：3" },
-      { key: "替换的预付款", label: "预付款", placeholder: "可手动修改" },
-      { key: "替换的预付款大写", label: "预付款大写", placeholder: "自动转换" },
-      { key: "替换的尾款", label: "尾款", placeholder: "可手动修改" },
-      { key: "替换的尾款大写", label: "尾款大写", placeholder: "自动转换" },
-      { key: "替换的费用表格图片", label: "费用表格图片", placeholder: "图片路径，可点选择" },
+      { key: "替换的预付款", label: "预付款", placeholder: "输入数字，自动转换大写" },
+      { key: "替换的预付款大写", label: "预付款大写", placeholder: "自动转换，也可手动修改" },
+      { key: "替换的尾款", label: "尾款", placeholder: "输入数字，自动转换大写" },
+      { key: "替换的尾款大写", label: "尾款大写", placeholder: "自动转换，也可手动修改" },
+      {
+        key: "替换的费用表格图片",
+        label: "费用表格图片",
+        placeholder: "请粘贴费用表格图片路径",
+        pick: "image",
+      },
     ],
   },
   {
@@ -55,16 +59,16 @@ const FORM_GROUPS: GroupDef[] = [
   {
     title: "乙方财务信息",
     fields: [
-      { key: "乙方银行账号", label: "银行账号", placeholder: "请输入银行账号" },
-      { key: "乙方银行开户行", label: "开户行", placeholder: "请输入开户行名称" },
+      { key: "乙方银行账号", label: "乙方银行账号", placeholder: "请输入银行账号" },
+      { key: "乙方银行开户行", label: "乙方银行开户行", placeholder: "请输入开户行名称" },
     ],
   },
   {
     title: "乙方联系人信息",
     fields: [
-      { key: "替换的乙方代表名称", label: "代表名称", placeholder: "请输入联系人姓名" },
-      { key: "替换的乙方代表电话", label: "代表电话", placeholder: "请输入联系电话" },
-      { key: "替换的乙方代表邮箱", label: "代表邮箱", placeholder: "请输入联系邮箱" },
+      { key: "替换的乙方代表名称", label: "乙方代表名称", placeholder: "请输入联系人姓名" },
+      { key: "替换的乙方代表电话", label: "乙方代表电话", placeholder: "请输入联系电话" },
+      { key: "替换的乙方代表邮箱", label: "乙方代表邮箱", placeholder: "请输入联系邮箱" },
     ],
   },
   {
@@ -79,6 +83,16 @@ function emptyForm(): Record<string, string> {
   return o;
 }
 
+/** Qt 风格 GroupBox */
+function GroupBox({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
+  return (
+    <fieldset className={`dm-group ${className}`.trim()}>
+      <legend className="dm-group-title">{title}</legend>
+      {children}
+    </fieldset>
+  );
+}
+
 export function App() {
   const [form, setForm] = useState<Record<string, string>>(emptyForm);
   const [templatePath, setTemplatePath] = useState("");
@@ -87,7 +101,6 @@ export function App() {
   const [ratio, setRatio] = useState(50);
   const [contactNames, setContactNames] = useState<string[]>([]);
   const [selectedContact, setSelectedContact] = useState("");
-  const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err" | "info"; text: string } | null>(null);
 
@@ -127,12 +140,8 @@ export function App() {
 
   const setField = (key: string, value: string) => {
     setForm((prev) => {
-      if (key === "替换的总费用") {
-        return applySplitFromTotal(value, ratio, prev);
-      }
-      if (key === "替换的预付款" || key === "替换的尾款") {
-        return applyAmountChinese(key, value, prev);
-      }
+      if (key === "替换的总费用") return applySplitFromTotal(value, ratio, prev);
+      if (key === "替换的预付款" || key === "替换的尾款") return applyAmountChinese(key, value, prev);
       return { ...prev, [key]: value };
     });
   };
@@ -167,9 +176,7 @@ export function App() {
         if (settings.template_path) setTemplatePath(settings.template_path);
         if (settings.output_dir) setOutputDir(settings.output_dir);
         await refreshContacts();
-        setStatus("就绪");
       } catch (e: any) {
-        setStatus("后端未就绪");
         setMsg({ type: "err", text: String(e?.message || e) });
       }
     })();
@@ -279,7 +286,6 @@ export function App() {
       }
     }
     setBusy(true);
-    setStatus("生成中…");
     try {
       const res = await api.generateContract({
         template: templatePath,
@@ -288,10 +294,8 @@ export function App() {
         output_name: outputName,
       });
       setMsg({ type: "ok", text: `DOCX 已生成：\n${res.path}` });
-      setStatus("生成成功");
     } catch (e: any) {
       setMsg({ type: "err", text: String(e?.message || e) });
-      setStatus("生成失败");
     } finally {
       setBusy(false);
     }
@@ -299,151 +303,181 @@ export function App() {
 
   return (
     <div className="dm-root">
-      <header className="dm-header">
+      {/* 标题栏：左品牌，右作者 — 对齐原版 */}
+      <header className="dm-titlebar">
         <div className="dm-brand">DealMaker</div>
-        <div className="dm-header-right">
-          <span className="se-hint-label">v{APP_VERSION}</span>
-          <span className="author">@繁星之子卡萨蒂亚</span>
-        </div>
+        <div className="dm-author">@繁星之子卡萨蒂亚</div>
       </header>
 
-      <section className="dm-toolbar se-card">
-        <SectionTitle>模板文件</SectionTitle>
-        <div className="se-btn-row" style={{ alignItems: "center" }}>
-          <TextField value={templatePath} placeholder="选择合同模板文件…" readOnly />
-          <Button onClick={pickTemplate}>选择文件</Button>
-        </div>
-      </section>
+      <div className="dm-body">
+        {/* 模板文件 */}
+        <GroupBox title="模板文件">
+          <div className="dm-row">
+            <input
+              type="text"
+              className="dm-input grow"
+              value={templatePath}
+              placeholder="选择合同模板文件..."
+              readOnly
+            />
+            <button type="button" className="dm-btn" onClick={pickTemplate}>
+              选择文件
+            </button>
+          </div>
+        </GroupBox>
 
-      <div className="dm-main">
-        <aside className="dm-left se-card">
-          <SectionTitle>联系人管理</SectionTitle>
-          <div className="se-btn-row">
-            <select
-              value={selectedContact}
-              onChange={(e) => setSelectedContact(e.target.value)}
-              style={{ flex: 1 }}
-            >
-              <option value="">-- 选择已有联系人 --</option>
-              {contactNames.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <Button onClick={() => loadContact(selectedContact)} disabled={!selectedContact}>
-              加载
-            </Button>
-          </div>
-          <div className="se-btn-row">
-            <Button onClick={saveCurrentContact}>保存当前为联系人</Button>
-            <Button onClick={clearForm}>新建</Button>
-            <Button onClick={deleteCurrentContact}>删除选中</Button>
-          </div>
-          <div className="dm-contact-list">
-            {contactNames.length === 0 ? (
-              <div className="se-hint-label" style={{ padding: 10 }}>
-                暂无联系人
+        {/* 主体：左联系人 | 右表单 */}
+        <div className="dm-splitter">
+          <div className="dm-left">
+            <GroupBox title="联系人管理" className="dm-contact-group">
+              <div className="dm-row">
+                <select
+                  className="dm-input grow"
+                  value={selectedContact}
+                  onChange={(e) => setSelectedContact(e.target.value)}
+                >
+                  <option value="">-- 选择已有联系人 --</option>
+                  {contactNames.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="dm-btn"
+                  onClick={() => loadContact(selectedContact)}
+                  disabled={!selectedContact}
+                >
+                  加载
+                </button>
               </div>
-            ) : (
-              <ul>
-                {contactNames.map((n) => (
-                  <li
-                    key={n}
-                    className={n === selectedContact ? "active" : ""}
-                    onClick={() => {
-                      setSelectedContact(n);
-                      loadContact(n);
-                    }}
-                  >
-                    {n}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </aside>
-
-        <main className="dm-right">
-          {FORM_GROUPS.map((group) => (
-            <InfoCard key={group.title} title={group.title}>
-              {group.title === "费用信息" && (
-                <div className="dm-ratio-row">
-                  <DetailLabel>预付款比例</DetailLabel>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={ratio}
-                    onChange={(e) => onRatioChange(e.target.value)}
-                    style={{ width: 90 }}
-                  />
-                  <HintLabel>%（默认 50，改总费用/比例时自动拆分）</HintLabel>
-                </div>
+              <div className="dm-row dm-contact-actions">
+                <button type="button" className="dm-btn" onClick={saveCurrentContact}>
+                  保存当前为联系人
+                </button>
+                <button type="button" className="dm-btn" onClick={clearForm}>
+                  新建
+                </button>
+                <button type="button" className="dm-btn" onClick={deleteCurrentContact}>
+                  删除选中
+                </button>
+              </div>
+            </GroupBox>
+            <div className="dm-contact-list">
+              {contactNames.length === 0 ? (
+                <div className="dm-list-empty">暂无联系人</div>
+              ) : (
+                <ul>
+                  {contactNames.map((n) => (
+                    <li
+                      key={n}
+                      className={n === selectedContact ? "active" : ""}
+                      onClick={() => {
+                        setSelectedContact(n);
+                        loadContact(n);
+                      }}
+                    >
+                      {n}
+                    </li>
+                  ))}
+                </ul>
               )}
-              <FieldGrid>
+            </div>
+          </div>
+
+          <div className="dm-right">
+            {FORM_GROUPS.map((group) => (
+              <GroupBox key={group.title} title={group.title}>
+                {group.title === "费用信息" && (
+                  <div className="dm-form-row">
+                    <label className="dm-label">预付款比例:</label>
+                    <div className="dm-field-line">
+                      <input
+                        type="number"
+                        className="dm-input dm-ratio-input"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={ratio}
+                        onChange={(e) => onRatioChange(e.target.value)}
+                      />
+                      <span className="dm-hint">%（默认 50，改总费用/比例时自动拆分）</span>
+                    </div>
+                  </div>
+                )}
                 {group.fields.map((f) => (
-                  <React.Fragment key={f.key}>
-                    <DetailLabel>{f.label}</DetailLabel>
-                    <div className="dm-field-with-btn">
-                      <TextField
+                  <div className="dm-form-row" key={f.key}>
+                    <label className="dm-label">{f.label}:</label>
+                    <div className="dm-field-line">
+                      <input
+                        type="text"
+                        className="dm-input grow"
                         value={form[f.key] || ""}
                         placeholder={f.placeholder}
-                        onChange={(v) => setField(f.key, v)}
+                        onChange={(e) => setField(f.key, e.target.value)}
                       />
-                      {f.key === "替换的费用表格图片" && (
-                        <Button onClick={pickImage}>选择</Button>
+                      {f.pick === "image" && (
+                        <button type="button" className="dm-btn" onClick={pickImage}>
+                          选择
+                        </button>
                       )}
                     </div>
-                  </React.Fragment>
+                  </div>
                 ))}
-              </FieldGrid>
-              {group.title === "费用信息" && payMismatch && (
-                <div className="dm-pay-warn">
-                  <WarnLabel>
-                    预付款 + 尾款 = {payMismatch.sum}，不等于总费用 {payMismatch.total}
-                    （差额 {payMismatch.diff}）。点击自动修正将以预付款为准重算尾款。
-                  </WarnLabel>
-                  <Button primary onClick={onAutoFix}>
-                    自动修正
-                  </Button>
-                </div>
-              )}
-            </InfoCard>
-          ))}
-        </main>
-      </div>
-
-      <section className="dm-output se-card">
-        <SectionTitle>输出设置</SectionTitle>
-        <div className="se-btn-row" style={{ alignItems: "center" }}>
-          <DetailLabel>输出目录</DetailLabel>
-          <TextField value={outputDir} placeholder="默认与模板同目录" readOnly />
-          <Button onClick={pickOutputDir}>选择</Button>
-          <DetailLabel>文件名</DetailLabel>
-          <TextField
-            value={outputName}
-            placeholder="合同编号_项目名称（乙方）"
-            onChange={setOutputName}
-          />
-        </div>
-        <div className="se-btn-row" style={{ marginTop: 10 }}>
-          <Button primary onClick={onGenerate} disabled={busy}>
-            {busy ? "生成中…" : "生成 DOCX"}
-          </Button>
-        </div>
-        {msg && (
-          <div className={`dm-msg ${msg.type}`} style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-            {msg.text}
+                {group.title === "费用信息" && payMismatch && (
+                  <div className="dm-pay-warn">
+                    <div className="dm-warn-text">
+                      预付款 + 尾款 = {payMismatch.sum}，不等于总费用 {payMismatch.total}
+                      （差额 {payMismatch.diff}）。自动修正将以预付款为准重算尾款。
+                    </div>
+                    <button type="button" className="dm-btn dm-btn-primary" onClick={onAutoFix}>
+                      自动修正
+                    </button>
+                  </div>
+                )}
+              </GroupBox>
+            ))}
           </div>
-        )}
-      </section>
+        </div>
 
-      <footer className="se-statusbar">
-        <span className="grow">{status}</span>
-        <span className="author">@繁星之子卡萨蒂亚</span>
-      </footer>
+        {/* 输出设置 — 单行，对齐原版 */}
+        <GroupBox title="输出设置">
+          <div className="dm-row dm-output-row">
+            <span className="dm-inline-label">输出目录:</span>
+            <input
+              type="text"
+              className="dm-input grow"
+              value={outputDir}
+              placeholder="默认与模板同目录"
+              readOnly
+            />
+            <button type="button" className="dm-btn" onClick={pickOutputDir}>
+              选择
+            </button>
+            <span className="dm-inline-label">文件名:</span>
+            <input
+              type="text"
+              className="dm-input dm-filename"
+              value={outputName}
+              placeholder="合同编号_乙方名称"
+              onChange={(e) => setOutputName(e.target.value)}
+            />
+          </div>
+        </GroupBox>
+
+        {msg && <div className={`dm-msg ${msg.type}`}>{msg.text}</div>}
+
+        {/* 全宽生成按钮 — 对齐原版紫色底栏 */}
+        <button
+          type="button"
+          className="dm-gen-btn"
+          onClick={onGenerate}
+          disabled={busy}
+        >
+          {busy ? "生成中…" : "生成 DOCX"}
+        </button>
+      </div>
     </div>
   );
 }
