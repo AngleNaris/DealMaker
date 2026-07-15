@@ -20,6 +20,7 @@ dist_*/
 # Temp / test outputs
 tmp/
 tmp_*/
+tmp_test/
 *.log
 _test_*.docx
 _test_*.json
