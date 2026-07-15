@@ -9,7 +9,7 @@
 - 预付款比例自动拆分（默认 50%）
 - 手动修改预付/尾款后校验合计；不等则提示并支持「自动修正」（以预付款为准重算尾款）
 - 金额自动转中文大写
-- PDF：优先 Microsoft Word 导出，否则 LibreOffice `writer_pdf_Export`（高保真排版）
+- PDF：优先 **WPS** COM 导出，其次 **Microsoft Word**；均无则提示安装（不使用 LibreOffice）
 
 ## 技术栈
 
@@ -71,16 +71,17 @@ officecli.exe --version
 
 ## PDF 导出依赖
 
-导出 PDF 需要其一：
+导出 PDF 按优先级使用：
 
-1. **Microsoft Word**（Windows，COM 导出，优先）
-2. **LibreOffice**（`soffice`，本机已验证可用）
+1. **WPS Office**（`Kwps.Application` COM `ExportAsFixedFormat`）
+2. **Microsoft Word** 桌面版（`Word.Application`）
 
-可设置环境变量 `LIBREOFFICE_PATH` / `SOFFICE_PATH` 指向 `soffice.exe`。
+二者都没有时，界面会提示安装 WPS 或 Word。**不使用 LibreOffice。**
 
 ```powershell
 # 调试：仅从已有 docx 转 pdf
 python -m backend.cli export_pdf '{"docx":"D:/path/合同.docx"}'
+python -m backend.cli ping
 ```
 
 ## 许可与署名

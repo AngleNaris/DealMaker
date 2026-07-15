@@ -169,8 +169,12 @@ export function App() {
   };
 
   useEffect(() => {
-    getCurrentWindow().setTitle(`DealMaker v${APP_VERSION}`);
     (async () => {
+      try {
+        await getCurrentWindow().setTitle(`DealMaker v${APP_VERSION}`);
+      } catch {
+        /* 浏览器预览时忽略 */
+      }
       try {
         const settings = await api.loadSettings();
         if (settings.template_path) setTemplatePath(settings.template_path);
@@ -317,10 +321,10 @@ export function App() {
         output_name: outputName,
       });
       const engine =
-        res.pdf_engine === "word"
-          ? "Microsoft Word"
-          : res.pdf_engine === "libreoffice"
-            ? "LibreOffice"
+        res.pdf_engine === "wps"
+          ? "WPS"
+          : res.pdf_engine === "word"
+            ? "Microsoft Word"
             : res.pdf_engine || "未知";
       setMsg({
         type: "ok",

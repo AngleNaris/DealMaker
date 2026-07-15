@@ -383,50 +383,43 @@ def build_output_path(
     return os.path.join(out_dir, f"{name}.{ext}")
 
 
-def find_soffice() -> Optional[str]:
-    """查找 LibreOffice soffice.exe。"""
-    env = os.environ.get("LIBREOFFICE_PATH") or os.environ.get("SOFFICE_PATH")
-    if env and os.path.isfile(env):
-        return env
-    candidates = [
-        r"C:\Program Files\LibreOffice\program\soffice.exe",
-        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
-        "/usr/bin/soffice",
-        "/usr/bin/libreoffice",
-        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-    ]
-    for p in candidates:
-        if os.path.isfile(p):
-            return p
-    # PATH
-    for name in ("soffice", "soffice.exe", "libreoffice"):
-        from shutil import which
-
-        found = which(name)
-        if found:
-            return found
-    return None
-
-
-def _word_com_available() -> bool:
+def _com_progid_available(progid: str) -> bool:
     if sys.platform != "win32":
         return False
     try:
         import winreg
 
-        winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "Word.Application").Close()
+        winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, progid).Close()
         return True
     except OSError:
         return False
 
 
+def _wps_com_available() -> bool:
+    """WPS 文字 COM（Kwps.Application）。"""
+    return _com_progid_available("Kwps.Application") or _com_progid_available(
+        "KWPS.Application"
+    )
+
+
+def _word_com_available() -> bool:
+    return _com_progid_available("Word.Application")
+
+
+def pdf_engines_status() -> Dict[str, bool]:
+    return {
+        "wps": _wps_com_available(),
+        "word": _word_com_available(),
+    }
+
+
 def docx_to_pdf(docx_path: str, pdf_path: Optional[str] = None) -> Dict[str, str]:
     """
-    将 DOCX 转为 PDF（高保真排版）。
+    将 DOCX 转为 PDF（高保真）。
 
-    优先 Microsoft Word ExportAsFixedFormat（若已安装），
-    否则使用 LibreOffice writer_pdf_Export。
-    返回 {path, engine}。
+    优先级：WPS → Microsoft Word。
+    均不可用时提示安装，不使用 LibreOffice。
+    返回 {path, engine}，engine 为 wps | word。
     """
     docx_path = os.path.abspath(docx_path)
     if not os.path.isfile(docx_path):
@@ -445,43 +438,80 @@ def docx_to_pdf(docx_path: str, pdf_path: Optional[str] = None) -> Dict[str, str
             pass
 
     errors: List[str] = []
+    has_wps = _wps_com_available()
+    has_word = _word_com_available()
 
-    if _word_com_available():
+    if has_wps:
         try:
-            return _docx_to_pdf_word(docx_path, pdf_path)
+            return _docx_to_pdf_com(docx_path, pdf_path, engine="wps")
+        except Exception as e:
+            errors.append(f"WPS: {e}")
+
+    if has_word:
+        try:
+            return _docx_to_pdf_com(docx_path, pdf_path, engine="word")
         except Exception as e:
             errors.append(f"Word: {e}")
 
-    soffice = find_soffice()
-    if soffice:
-        try:
-            return _docx_to_pdf_libreoffice(docx_path, pdf_path, soffice)
-        except Exception as e:
-            errors.append(f"LibreOffice: {e}")
-    else:
-        errors.append("未找到 LibreOffice（soffice）")
+    if not has_wps and not has_word:
+        raise RuntimeError(
+            "无法导出 PDF：未检测到 WPS 文字 或 Microsoft Word。\n"
+            "请安装其一后重试：\n"
+            "  · WPS Office（推荐，本机 COM：Kwps.Application）\n"
+            "  · Microsoft Word 桌面版\n"
+            "安装完成后重启 DealMaker。"
+        )
 
+    detail = "\n".join(errors) if errors else "未知错误"
     raise RuntimeError(
-        "PDF 转换失败，请安装 Microsoft Word 或 LibreOffice。\n" + "\n".join(errors)
+        "PDF 导出失败（已尝试本机可用的办公软件）：\n"
+        f"{detail}\n"
+        "请确认 WPS/Word 可正常打开文档，关闭其弹窗后重试。"
     )
 
 
-def _docx_to_pdf_word(docx_path: str, pdf_path: str) -> Dict[str, str]:
-    """Word COM：ExportAsFixedFormat（17 = PDF）。"""
-    # 用 PowerShell 调用 COM，避免依赖 pywin32
+def _docx_to_pdf_com(docx_path: str, pdf_path: str, engine: str) -> Dict[str, str]:
+    """
+    通过 COM ExportAsFixedFormat 导出 PDF。
+    engine: wps | word
+    """
+    if engine == "wps":
+        progid = "Kwps.Application"
+        label = "WPS"
+    elif engine == "word":
+        progid = "Word.Application"
+        label = "Word"
+    else:
+        raise ValueError(f"未知引擎: {engine}")
+
     def esc(p: str) -> str:
         return p.replace("'", "''")
 
-    ps = (
-        "$ErrorActionPreference='Stop'; "
-        "$word = New-Object -ComObject Word.Application; "
-        "$word.Visible = $false; "
-        f"$doc = $word.Documents.Open('{esc(docx_path)}'); "
-        f"$doc.ExportAsFixedFormat('{esc(pdf_path)}', 17); "
-        "$doc.Close($false); "
-        "$word.Quit(); "
-        "[System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null"
-    )
+    # PowerShell 调用 COM，避免依赖 pywin32
+    ps = f"""
+$ErrorActionPreference = 'Stop'
+$docx = '{esc(docx_path)}'
+$pdf = '{esc(pdf_path)}'
+$app = $null
+$doc = $null
+try {{
+  $app = New-Object -ComObject {progid}
+  try {{ $app.Visible = $false }} catch {{}}
+  try {{ $app.DisplayAlerts = 0 }} catch {{}}
+  $doc = $app.Documents.Open($docx)
+  $doc.ExportAsFixedFormat($pdf, 17)
+  if (-not (Test-Path -LiteralPath $pdf)) {{ throw '{label} 未生成 PDF 文件' }}
+}} finally {{
+  if ($null -ne $doc) {{
+    try {{ $doc.Close($false) }} catch {{ try {{ $doc.Close() }} catch {{}} }}
+  }}
+  if ($null -ne $app) {{
+    try {{ $app.Quit() }} catch {{}}
+    try {{ [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($app) }} catch {{}}
+  }}
+  [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+}}
+"""
     result = subprocess.run(
         [
             "powershell",
@@ -497,50 +527,6 @@ def _docx_to_pdf_word(docx_path: str, pdf_path: str) -> Dict[str, str]:
         timeout=180,
     )
     if result.returncode != 0 or not os.path.isfile(pdf_path):
-        err = (result.stderr or result.stdout or "Word 导出失败").strip()
+        err = (result.stderr or result.stdout or f"{label} 导出失败").strip()
         raise RuntimeError(err)
-    return {"path": pdf_path, "engine": "word"}
-
-
-def _docx_to_pdf_libreoffice(docx_path: str, pdf_path: str, soffice: str) -> Dict[str, str]:
-    """LibreOffice headless writer_pdf_Export。"""
-    out_dir = os.path.dirname(pdf_path) or "."
-    # LibreOffice 输出文件名由输入 basename 决定
-    expected = os.path.join(out_dir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
-
-    # 独立用户配置，避免多实例锁
-    profile = os.path.join(get_config_dir(), "lo_profile")
-    os.makedirs(profile, exist_ok=True)
-    profile_uri = "file:///" + profile.replace("\\", "/").lstrip("/")
-
-    result = subprocess.run(
-        [
-            soffice,
-            "--headless",
-            "--nologo",
-            "--nofirststartwizard",
-            f"-env:UserInstallation={profile_uri}",
-            "--convert-to",
-            "pdf:writer_pdf_Export",
-            "--outdir",
-            out_dir,
-            docx_path,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=180,
-    )
-    if result.returncode != 0:
-        err = (result.stderr or result.stdout or "LibreOffice 转换失败").strip()
-        raise RuntimeError(err)
-
-    if not os.path.isfile(expected):
-        raise RuntimeError(f"未生成 PDF: {expected}")
-
-    if os.path.abspath(expected) != os.path.abspath(pdf_path):
-        shutil.move(expected, pdf_path)
-
-    if not os.path.isfile(pdf_path):
-        raise RuntimeError(f"PDF 路径无效: {pdf_path}")
-
-    return {"path": pdf_path, "engine": "libreoffice"}
+    return {"path": pdf_path, "engine": engine}

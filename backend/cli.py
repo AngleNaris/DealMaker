@@ -21,9 +21,9 @@ from backend.core import (
     build_output_path,
     default_template_path,
     docx_to_pdf,
-    find_soffice,
     get_officecli_path,
     load_settings,
+    pdf_engines_status,
     project_root,
     save_settings,
     split_by_ratio,
@@ -40,11 +40,12 @@ def _err(msg: str) -> Dict[str, Any]:
 
 def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if action == "ping":
+        engines = pdf_engines_status()
         return _ok(
             {
                 "project_root": project_root(),
                 "officecli": get_officecli_path(),
-                "soffice": find_soffice(),
+                "pdf_engines": engines,
             }
         )
 

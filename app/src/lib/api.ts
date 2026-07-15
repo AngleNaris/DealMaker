@@ -62,5 +62,9 @@ export function exportPdf(params: {
 }
 
 export function ping() {
-  return backend<{ project_root: string; officecli: string; soffice?: string | null }>("ping");
+  return backend<{
+    project_root: string;
+    officecli: string;
+    pdf_engines?: { wps: boolean; word: boolean };
+  }>("ping");
 }
