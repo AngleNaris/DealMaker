@@ -50,3 +50,7 @@ app/src-tauri/gen/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+*.pdf
+!assets/**
+

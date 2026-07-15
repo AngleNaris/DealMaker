@@ -354,11 +354,12 @@ export function App() {
           setQuoteDraft(data);
           const total = sumPartner(data.rows);
           setForm((prev) => {
-            let next = { ...prev, "替换的费用表格图片": imagePath };
+            const patched: Record<string, string> = { ...prev };
+            patched["替换的费用表格图片"] = imagePath;
             if (total > 0) {
-              next = applySplitFromTotal(String(total), ratio, next);
+              return applySplitFromTotal(String(total), ratio, patched);
             }
-            return next;
+            return patched;
           });
           setView("main");
           setMsg({ type: "ok", text: `报价表已填入：${imagePath}` });
