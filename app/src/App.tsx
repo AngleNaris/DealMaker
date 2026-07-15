@@ -268,23 +268,28 @@ export function App() {
     setMsg(null);
   };
 
-  const onGenerate = async () => {
+  const validateBeforeGenerate = (): boolean => {
     if (!templatePath) {
       setMsg({ type: "err", text: "请先选择模板文件" });
-      return;
+      return false;
     }
     if (payMismatch) {
       setMsg({ type: "err", text: "预付款 + 尾款 ≠ 总费用，请先修正后再生成" });
-      return;
+      return false;
     }
     const empty = Object.entries(form)
       .filter(([, v]) => !String(v).trim())
       .map(([k]) => k);
     if (empty.length) {
       if (!confirm(`以下字段为空（示例）：\n${empty.slice(0, 5).join("\n")}\n\n仍要继续生成吗？`)) {
-        return;
+        return false;
       }
     }
+    return true;
+  };
+
+  const onGenerateDocx = async () => {
+    if (!validateBeforeGenerate()) return;
     setBusy(true);
     try {
       const res = await api.generateContract({
@@ -293,7 +298,34 @@ export function App() {
         output_dir: outputDir,
         output_name: outputName,
       });
-      setMsg({ type: "ok", text: `DOCX 已生成：\n${res.path}` });
+      setMsg({ type: "ok", text: `DOCX 已生成：\n${res.docx || res.path}` });
+    } catch (e: any) {
+      setMsg({ type: "err", text: String(e?.message || e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onGeneratePdf = async () => {
+    if (!validateBeforeGenerate()) return;
+    setBusy(true);
+    try {
+      const res = await api.exportPdf({
+        template: templatePath,
+        data: form,
+        output_dir: outputDir,
+        output_name: outputName,
+      });
+      const engine =
+        res.pdf_engine === "word"
+          ? "Microsoft Word"
+          : res.pdf_engine === "libreoffice"
+            ? "LibreOffice"
+            : res.pdf_engine || "未知";
+      setMsg({
+        type: "ok",
+        text: `PDF 已导出（引擎: ${engine}）：\n${res.pdf}\n\n同时生成 DOCX：\n${res.docx}`,
+      });
     } catch (e: any) {
       setMsg({ type: "err", text: String(e?.message || e) });
     } finally {
@@ -303,14 +335,11 @@ export function App() {
 
   return (
     <div className="dm-root">
-      {/* 标题栏：左品牌，右作者 — 对齐原版 */}
       <header className="dm-titlebar">
-        <div className="dm-brand">DealMaker</div>
         <div className="dm-author">@繁星之子卡萨蒂亚</div>
       </header>
 
       <div className="dm-body">
-        {/* 模板文件 */}
         <GroupBox title="模板文件">
           <div className="dm-row">
             <input
@@ -326,64 +355,41 @@ export function App() {
           </div>
         </GroupBox>
 
-        {/* 主体：左联系人 | 右表单 */}
         <div className="dm-splitter">
           <div className="dm-left">
             <GroupBox title="联系人管理" className="dm-contact-group">
-              <div className="dm-row">
-                <select
-                  className="dm-input grow"
-                  value={selectedContact}
-                  onChange={(e) => setSelectedContact(e.target.value)}
-                >
-                  <option value="">-- 选择已有联系人 --</option>
-                  {contactNames.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="dm-btn"
-                  onClick={() => loadContact(selectedContact)}
-                  disabled={!selectedContact}
-                >
-                  加载
+              <div className="dm-contact-actions">
+                <button type="button" className="dm-btn dm-btn-equal" onClick={saveCurrentContact}>
+                  保存
                 </button>
-              </div>
-              <div className="dm-row dm-contact-actions">
-                <button type="button" className="dm-btn" onClick={saveCurrentContact}>
-                  保存当前为联系人
-                </button>
-                <button type="button" className="dm-btn" onClick={clearForm}>
+                <button type="button" className="dm-btn dm-btn-equal" onClick={clearForm}>
                   新建
                 </button>
-                <button type="button" className="dm-btn" onClick={deleteCurrentContact}>
-                  删除选中
+                <button type="button" className="dm-btn dm-btn-equal" onClick={deleteCurrentContact}>
+                  删除
                 </button>
               </div>
+              <div className="dm-contact-list">
+                {contactNames.length === 0 ? (
+                  <div className="dm-list-empty">暂无联系人，点击列表项加载</div>
+                ) : (
+                  <ul>
+                    {contactNames.map((n) => (
+                      <li
+                        key={n}
+                        className={n === selectedContact ? "active" : ""}
+                        onClick={() => {
+                          setSelectedContact(n);
+                          loadContact(n);
+                        }}
+                      >
+                        {n}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </GroupBox>
-            <div className="dm-contact-list">
-              {contactNames.length === 0 ? (
-                <div className="dm-list-empty">暂无联系人</div>
-              ) : (
-                <ul>
-                  {contactNames.map((n) => (
-                    <li
-                      key={n}
-                      className={n === selectedContact ? "active" : ""}
-                      onClick={() => {
-                        setSelectedContact(n);
-                        loadContact(n);
-                      }}
-                    >
-                      {n}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
 
           <div className="dm-right">
@@ -431,7 +437,7 @@ export function App() {
                       预付款 + 尾款 = {payMismatch.sum}，不等于总费用 {payMismatch.total}
                       （差额 {payMismatch.diff}）。自动修正将以预付款为准重算尾款。
                     </div>
-                    <button type="button" className="dm-btn dm-btn-primary" onClick={onAutoFix}>
+                    <button type="button" className="dm-btn dm-btn-outline" onClick={onAutoFix}>
                       自动修正
                     </button>
                   </div>
@@ -441,7 +447,6 @@ export function App() {
           </div>
         </div>
 
-        {/* 输出设置 — 单行，对齐原版 */}
         <GroupBox title="输出设置">
           <div className="dm-row dm-output-row">
             <span className="dm-inline-label">输出目录:</span>
@@ -468,15 +473,24 @@ export function App() {
 
         {msg && <div className={`dm-msg ${msg.type}`}>{msg.text}</div>}
 
-        {/* 全宽生成按钮 — 对齐原版紫色底栏 */}
-        <button
-          type="button"
-          className="dm-gen-btn"
-          onClick={onGenerate}
-          disabled={busy}
-        >
-          {busy ? "生成中…" : "生成 DOCX"}
-        </button>
+        <div className="dm-gen-row">
+          <button
+            type="button"
+            className="dm-gen-btn"
+            onClick={onGenerateDocx}
+            disabled={busy}
+          >
+            {busy ? "处理中…" : "生成 DOCX"}
+          </button>
+          <button
+            type="button"
+            className="dm-gen-btn"
+            onClick={onGeneratePdf}
+            disabled={busy}
+          >
+            {busy ? "处理中…" : "导出 PDF"}
+          </button>
+        </div>
       </div>
     </div>
   );

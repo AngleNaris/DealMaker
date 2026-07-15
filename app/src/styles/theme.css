@@ -350,8 +350,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   display: flex; flex-direction: column; gap: 14px;
 }
 
-
-/* ════════════ DealMaker 原版布局复刻 ════════════ */
+/* ════════════ DealMaker 布局 ════════════ */
 
 .dm-root {
   display: flex;
@@ -362,23 +361,18 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   color: var(--text);
 }
 
-/* 标题栏：左品牌 / 右作者 */
+/* 仅右侧作者署名 */
 .dm-titlebar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px 2px;
+  justify-content: flex-end;
+  padding: 8px 14px 0;
   flex: 0 0 auto;
-}
-.dm-brand {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary-text);
-  letter-spacing: 0.02em;
 }
 .dm-author {
   font-size: 12px;
-  color: #a89bb8;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 
 .dm-body {
@@ -386,49 +380,54 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 4px 10px 10px;
+  gap: 12px;
+  padding: 4px 14px 14px;
   overflow: hidden;
 }
 
-/* Qt 风格 GroupBox：边框 + 标题压在上边线上 */
+/* GroupBox */
 .dm-group {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin: 10px 0 0;
-  padding: 14px 12px 10px;
+  margin: 0;
+  padding: 12px 12px 10px;
   min-width: 0;
   background: transparent;
 }
 .dm-group-title {
   padding: 0 8px;
-  margin-left: 4px;
+  margin-left: 2px;
   color: var(--primary-text);
-  font-weight: 700;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: 12px;
 }
 
-/* 通用横排 */
 .dm-row {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   min-width: 0;
 }
 .dm-row .grow { flex: 1 1 auto; min-width: 0; }
 
-/* 输入 / 按钮 — 贴近原版 PyQt 尺寸 */
+/* 统一控件高度，同行按钮与输入同高 */
+:root {
+  --dm-control-h: 34px;
+}
+
 .dm-input {
+  box-sizing: border-box;
+  height: var(--dm-control-h);
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 7px 10px;
+  padding: 0 10px;
   font-size: 13px;
   font-family: inherit;
   outline: none;
-  min-height: 20px;
+  line-height: calc(var(--dm-control-h) - 2px);
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 .dm-input:focus {
@@ -441,83 +440,91 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .dm-input::placeholder { color: var(--text-muted); }
 
-select.dm-input {
-  cursor: pointer;
-  appearance: auto;
-}
-
 .dm-btn {
-  background: #3a3842;
+  box-sizing: border-box;
+  height: var(--dm-control-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 7px 12px;
+  padding: 0 14px;
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--transition), border-color var(--transition);
+  line-height: 1;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
 .dm-btn:hover:not(:disabled) {
   background: #2d2b33;
-  border-color: var(--primary);
+  border-color: var(--primary-text);
+  color: var(--primary-text);
 }
 .dm-btn:disabled {
   color: #585460;
   background: var(--surface-2);
+  border-color: #302d36;
   cursor: not-allowed;
 }
-.dm-btn-primary {
-  background: var(--primary);
-  color: var(--primary-text);
+.dm-btn-outline {
+  background: var(--surface-2);
   border-color: var(--primary);
-  font-weight: 500;
+  color: var(--primary-text);
 }
-.dm-btn-primary:hover:not(:disabled) {
-  background: var(--primary-hover);
+.dm-btn-outline:hover:not(:disabled) {
+  background: #2d2b33;
+  border-color: var(--primary-text);
 }
 
-/* 主体左右分栏：约 220 : 680 */
+/* 主体分栏 */
 .dm-splitter {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: row;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
   overflow: hidden;
 }
 
 .dm-left {
-  width: 240px;
-  min-width: 200px;
-  flex: 0 0 240px;
+  width: 220px;
+  min-width: 190px;
+  flex: 0 0 220px;
   display: flex;
   flex-direction: column;
-  gap: 0;
   min-height: 0;
   overflow: hidden;
 }
 .dm-left .dm-contact-group {
-  flex: 0 0 auto;
-  margin-top: 0;
-}
-.dm-contact-actions {
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-.dm-contact-actions .dm-btn {
   flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 12px;
+  gap: 10px;
+}
+
+/* 保存 / 新建 / 删除 等宽同高 */
+.dm-contact-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.dm-btn-equal {
+  flex: 1 1 0;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 0 6px;
   font-size: 12px;
 }
 
-/* 联系人列表：占满左侧剩余高度 */
 .dm-contact-list {
   flex: 1 1 auto;
-  min-height: 80px;
-  margin-top: 8px;
+  min-height: 0;
   border: 1px solid var(--border);
   background: var(--surface-2);
   overflow-y: auto;
@@ -528,7 +535,7 @@ select.dm-input {
   padding: 0;
 }
 .dm-contact-list li {
-  padding: 8px 10px;
+  padding: 9px 10px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
@@ -536,37 +543,35 @@ select.dm-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background var(--transition), color var(--transition);
 }
 .dm-contact-list li:hover { background: #2d2b33; }
 .dm-contact-list li.active {
-  background: var(--primary);
+  background: rgba(79, 55, 139, 0.55);
   color: var(--primary-text);
+  border-left: 2px solid var(--primary-text);
 }
 .dm-list-empty {
-  padding: 16px 10px;
+  padding: 18px 12px;
   color: var(--text-muted);
   font-size: 12px;
   text-align: center;
+  line-height: 1.5;
 }
 
-/* 右侧表单：可滚动，分组堆叠 */
 .dm-right {
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding-right: 2px;
 }
-.dm-right .dm-group {
-  margin-top: 12px;
-}
-.dm-right .dm-group:first-child {
-  margin-top: 0;
-}
 
-/* QFormLayout 风格：标签列 + 控件列 */
 .dm-form-row {
   display: grid;
-  grid-template-columns: 120px 1fr;
+  grid-template-columns: 110px 1fr;
   column-gap: 10px;
   align-items: center;
   margin-bottom: 8px;
@@ -583,7 +588,7 @@ select.dm-input {
 
 .dm-field-line {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   min-width: 0;
 }
@@ -594,73 +599,89 @@ select.dm-input {
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
+  align-self: center;
 }
 
 .dm-pay-warn {
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid #e8b84b;
-  background: rgba(232, 184, 75, 0.08);
+  border: 1px solid rgba(232, 184, 75, 0.55);
+  background: rgba(232, 184, 75, 0.06);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .dm-warn-text {
   color: #e8b84b;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
-/* 输出设置单行 */
 .dm-output-row {
   flex-wrap: nowrap;
+  align-items: stretch;
 }
 .dm-inline-label {
   color: var(--text-dim);
   font-size: 13px;
   white-space: nowrap;
   flex: 0 0 auto;
+  align-self: center;
 }
 .dm-filename {
   width: 200px;
   flex: 0 0 200px;
 }
 
-/* 消息 */
 .dm-msg {
-  margin-top: 8px;
-  font-size: 13px;
+  margin: 0;
+  font-size: 12px;
   white-space: pre-wrap;
   line-height: 1.4;
+  flex: 0 0 auto;
 }
 .dm-msg.ok { color: var(--success); }
 .dm-msg.err { color: #e07070; }
 .dm-msg.info { color: var(--text-dim); }
 
-/* 全宽紫色生成按钮 — 对齐原版 */
-.dm-gen-btn {
-  margin-top: 10px;
-  width: 100%;
-  border: none;
-  border-radius: var(--radius);
-  background: #7c3aed;
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 700;
-  font-family: inherit;
-  padding: 12px 24px;
-  cursor: pointer;
-  transition: background var(--transition);
+/* 底部操作：DOCX / PDF 并排 */
+.dm-gen-row {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
   flex: 0 0 auto;
 }
+
+/* 生成按钮：深色底 + 强调色描边（非大面积填充） */
+.dm-gen-btn {
+  box-sizing: border-box;
+  margin: 0;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  height: 42px;
+  border: 1px solid var(--primary-text);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--primary-text);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
 .dm-gen-btn:hover:not(:disabled) {
-  background: #6d28d9;
+  background: #2d2b33;
+  border-color: #d4c4ff;
+  color: #d4c4ff;
 }
 .dm-gen-btn:active:not(:disabled) {
-  background: #5b21b6;
+  background: var(--surface-2);
 }
 .dm-gen-btn:disabled {
-  background: #313244;
-  color: #6c7086;
+  background: var(--surface-2);
+  border-color: #302d36;
+  color: #585460;
   cursor: not-allowed;
 }

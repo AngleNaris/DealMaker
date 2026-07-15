@@ -9,6 +9,7 @@ DealMaker 后端 CLI：stdin/参数 收 JSON，stdout 吐 JSON。
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any, Dict
 
@@ -19,6 +20,8 @@ from backend.core import (
     auto_fix_final,
     build_output_path,
     default_template_path,
+    docx_to_pdf,
+    find_soffice,
     get_officecli_path,
     load_settings,
     project_root,
@@ -41,6 +44,7 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "project_root": project_root(),
                 "officecli": get_officecli_path(),
+                "soffice": find_soffice(),
             }
         )
 
@@ -121,13 +125,54 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         data = payload.get("data") or {}
         output_dir = payload.get("output_dir") or ""
         output_name = payload.get("output_name") or ""
+        also_pdf = bool(payload.get("pdf") or payload.get("also_pdf"))
         if not template:
             return _err("请先选择模板")
         try:
-            out_path = build_output_path(template, data, output_dir, output_name)
+            out_path = build_output_path(template, data, output_dir, output_name, ext="docx")
             processor = TemplateProcessor(template)
             processor.generate(data, out_path)
-            return _ok({"path": out_path})
+            result: Dict[str, Any] = {"path": out_path, "docx": out_path}
+            if also_pdf:
+                pdf_path = build_output_path(template, data, output_dir, output_name, ext="pdf")
+                pdf_info = docx_to_pdf(out_path, pdf_path)
+                result["pdf"] = pdf_info["path"]
+                result["pdf_engine"] = pdf_info["engine"]
+                result["path"] = pdf_info["path"]
+            return _ok(result)
+        except Exception as e:
+            return _err(str(e))
+
+    if action == "export_pdf":
+        """从已有 docx 转 PDF，或先生成合同再转 PDF。"""
+        docx_path = payload.get("docx") or payload.get("docx_path") or ""
+        template = payload.get("template") or ""
+        data = payload.get("data") or {}
+        output_dir = payload.get("output_dir") or ""
+        output_name = payload.get("output_name") or ""
+        try:
+            if not docx_path:
+                if not template:
+                    return _err("请先选择模板或指定 docx")
+                docx_path = build_output_path(template, data, output_dir, output_name, ext="docx")
+                processor = TemplateProcessor(template)
+                processor.generate(data, docx_path)
+                pdf_path = build_output_path(template, data, output_dir, output_name, ext="pdf")
+            else:
+                pdf_path = (
+                    payload.get("pdf")
+                    or payload.get("pdf_path")
+                    or os.path.splitext(docx_path)[0] + ".pdf"
+                )
+            info = docx_to_pdf(docx_path, pdf_path)
+            return _ok(
+                {
+                    "path": info["path"],
+                    "pdf": info["path"],
+                    "docx": docx_path,
+                    "pdf_engine": info["engine"],
+                }
+            )
         except Exception as e:
             return _err(str(e))
 

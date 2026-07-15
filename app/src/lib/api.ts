@@ -37,10 +37,30 @@ export function generateContract(params: {
   data: Record<string, string>;
   output_dir?: string;
   output_name?: string;
+  pdf?: boolean;
 }) {
-  return backend<{ path: string }>("generate", params);
+  return backend<{
+    path: string;
+    docx?: string;
+    pdf?: string;
+    pdf_engine?: string;
+  }>("generate", params);
+}
+
+export function exportPdf(params: {
+  template: string;
+  data: Record<string, string>;
+  output_dir?: string;
+  output_name?: string;
+}) {
+  return backend<{
+    path: string;
+    docx: string;
+    pdf: string;
+    pdf_engine: string;
+  }>("export_pdf", params);
 }
 
 export function ping() {
-  return backend<{ project_root: string; officecli: string }>("ping");
+  return backend<{ project_root: string; officecli: string; soffice?: string | null }>("ping");
 }
