@@ -144,6 +144,34 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e:
             return _err(str(e))
 
+    if action == "save_quote_image":
+        """保存报价表 PNG（base64）到 .contract_tool/quotes/"""
+        import base64
+        from datetime import datetime
+
+        b64 = payload.get("base64") or ""
+        filename = (payload.get("filename") or "").strip()
+        if not b64:
+            return _err("缺少图片数据")
+        if not filename:
+            filename = f"报价表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        # 安全文件名
+        filename = os.path.basename(filename).replace("..", "")
+        if not filename.lower().endswith(".png"):
+            filename += ".png"
+        try:
+            from backend.core import get_config_dir
+
+            out_dir = os.path.join(get_config_dir(), "quotes")
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, filename)
+            raw = base64.b64decode(b64)
+            with open(path, "wb") as f:
+                f.write(raw)
+            return _ok({"path": path, "size": len(raw)})
+        except Exception as e:
+            return _err(str(e))
+
     if action == "export_pdf":
         """从已有 docx 转 PDF，或先生成合同再转 PDF。"""
         docx_path = payload.get("docx") or payload.get("docx_path") or ""

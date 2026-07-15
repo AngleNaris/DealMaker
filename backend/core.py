@@ -248,15 +248,40 @@ class TemplateProcessor:
         doc.save(output_path)
         return output_path
 
+    def _content_width_emu(self, doc) -> int:
+        """当前节正文可用宽度（页宽 - 左右边距），EMU。"""
+        section = doc.sections[0]
+        # 若图片所在段落属于其它节，尽量用对应节；默认第一节
+        usable = int(section.page_width) - int(section.left_margin) - int(section.right_margin)
+        # 略留一点余量，避免贴边溢出
+        usable = max(usable - int(Inches(0.05)), int(Inches(1)))
+        return usable
+
     def _insert_image(self, doc, img_path: str):
+        """插入费用表格图片，宽度自适应页面正文宽度，高度按比例缩放。"""
+        width = self._content_width_emu(doc)
+
+        def place_in_paragraph(para) -> bool:
+            if "替换的费用表格图片" not in para.text:
+                return False
+            for run in para.runs:
+                run.text = ""
+            run = para.add_run()
+            # 只设 width 时 python-docx 保持原图宽高比
+            run.add_picture(img_path, width=width)
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            return True
+
         for para in doc.paragraphs:
-            if "替换的费用表格图片" in para.text:
-                for run in para.runs:
-                    run.text = ""
-                run = para.add_run()
-                run.add_picture(img_path, width=Inches(5.5))
-                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if place_in_paragraph(para):
                 return
+
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        if place_in_paragraph(para):
+                            return
 
     def _normalize_address_font(self, doc):
         addr_start = -1

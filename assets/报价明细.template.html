@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目标题 报价明细</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        html, body { margin: 0; padding: 0; }
+
+        body {
+            padding: 24px 28px;
+            background: #ffffff;
+            color: #000000;
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Heiti SC", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+            font-size: 12.5px;
+            line-height: 1.4;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .page { max-width: 1100px; margin: 0 auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #000000;
+            font-size: 12.5px;
+        }
+
+        /* ===== 标题行：表格最顶部，浅灰底黑字 ===== */
+        .title-row td {
+            border: 1px solid #000000;
+            background: #d6d6d6;
+            color: #000000;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            padding: 11px 8px;
+        }
+
+        /* ===== 表头：浅灰底、纯黑字、统一字体/字号/样式、全部居中 ===== */
+        thead th {
+            border: 1px solid #000000;
+            background: #ececec;
+            color: #000000;
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Heiti SC", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+            font-weight: 700;
+            font-size: 12.5px;
+            font-style: normal;
+            text-align: center !important;
+            vertical-align: middle;
+            padding: 8px 6px;
+            white-space: nowrap;
+        }
+
+        tbody td {
+            border: 1px solid #000000;
+            padding: 9px 8px;
+            vertical-align: middle;
+            color: #000000;
+        }
+
+        /* ===== 列宽（th / td 共享）===== */
+        .c-idx     { width: 42px; }
+        .c-name    { width: 132px; }
+        .c-qty     { width: 64px; }
+        .c-dur     { width: 56px; }
+        .c-price   { width: 104px; }
+        .c-partner { width: 104px; }
+        .c-spec    { width: auto; min-width: 250px; }
+        .c-note    { width: 124px; }
+
+        /* ===== 数据列对齐与字体（仅 tbody，不污染表头）===== */
+        tbody .c-idx     { text-align: center; }
+        tbody .c-name    { text-align: center; font-weight: 600; }
+        tbody .c-qty     { text-align: center; }
+        tbody .c-dur     { text-align: center; }
+        tbody .c-price   { text-align: right; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace; font-size: 14px; }
+        tbody .c-partner { text-align: right; }
+        tbody .c-spec    { text-align: left; }
+        tbody .c-note    { text-align: left; font-size: 11px; color: #000000; }
+
+        /* ===== 价格：合作价与总价放大；单价保持与时长列一致 ===== */
+        .price-lg {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .price-lg-symbol {
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            margin-right: 1px;
+        }
+
+        /* ===== 交付规格：标签化，按规范标签名，一行多标签 ===== */
+        .spec-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; }
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 7px;
+            border: 1px solid #c4c4c4;
+            background: #f0f0f0;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: nowrap;
+            color: #000000;
+        }
+        .tag .k { font-weight: 700; margin-right: 4px; color: #000000; }
+        .tag .v { color: #000000; }
+
+        /* ===== 合计行 ===== */
+        tfoot td {
+            border: 1px solid #000000;
+            padding: 10px 8px;
+            background: #f2f2f2;
+            font-weight: 700;
+            font-size: 12.5px;
+            color: #000000;
+        }
+        .foot-label  { text-align: center; }
+        .foot-amount { text-align: right; }
+        .foot-amount .price-lg {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+            font-size: 17px;
+            font-weight: 700;
+        }
+        .foot-amount .price-lg-symbol {
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        .foot-note { text-align: center; font-weight: 400; color: #000000; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <table>
+            <thead>
+                <tr class="title-row">
+                    <td colspan="8">项目标题 报价明细</td>
+                </tr>
+                <tr>
+                    <th class="c-idx">编号</th>
+                    <th class="c-name">服务名称</th>
+                    <th class="c-qty">数量</th>
+                    <th class="c-dur">时长</th>
+                    <th class="c-price">单价</th>
+                    <th class="c-partner">合作价</th>
+                    <th class="c-spec">交付规格</th>
+                    <th class="c-note">其它备注</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="c-idx">1</td>
+                    <td class="c-name">H5祝福（视频）</td>
+                    <td class="c-qty">1 项</td>
+                    <td class="c-dur">10s</td>
+                    <td class="c-price">¥1,400</td>
+                    <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">1,000</span></td>
+                    <td class="c-spec">
+                        <div class="spec-tags">
+                            <span class="tag"><span class="k">尺寸</span><span class="v">1920×1080（拼接1920×2160）</span></span>
+                            <span class="tag"><span class="k">格式</span><span class="v">上下双通道MP4</span></span>
+                            <span class="tag"><span class="k">需求1</span><span class="v">下方为alpha透明通道</span></span>
+                        </div>
+                    </td>
+                    <td class="c-note">需音效设计，无需音乐</td>
+                </tr>
+                <tr>
+                    <td class="c-idx">2</td>
+                    <td class="c-name">H5祝福（平面）</td>
+                    <td class="c-qty">4 项</td>
+                    <td class="c-dur">/</td>
+                    <td class="c-price">¥800</td>
+                    <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">3,000</span></td>
+                    <td class="c-spec">
+                        <div class="spec-tags">
+                            <span class="tag"><span class="k">交付1</span><span class="v">2 个 GIF</span></span>
+                            <span class="tag"><span class="k">交付2</span><span class="v">6 个 PNG</span></span>
+                            <span class="tag"><span class="k">尺寸</span><span class="v">最大不超过900×400</span></span>
+                            <span class="tag"><span class="k">需求1</span><span class="v">多尺寸交付</span></span>
+                        </div>
+                    </td>
+                    <td class="c-note">无需音频设计</td>
+                </tr>
+                <tr>
+                    <td class="c-idx">3</td>
+                    <td class="c-name">K歌装扮</td>
+                    <td class="c-qty">4 项</td>
+                    <td class="c-dur">16s</td>
+                    <td class="c-price">¥1,440</td>
+                    <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">5,000</span></td>
+                    <td class="c-spec">
+                        <div class="spec-tags">
+                            <span class="tag"><span class="k">交付1</span><span class="v">1280×720 视频</span></span>
+                            <span class="tag"><span class="k">交付2</span><span class="v">PNG 格式</span></span>
+                            <span class="tag"><span class="k">交付3</span><span class="v">AE 工程</span></span>
+                        </div>
+                    </td>
+                    <td class="c-note">无需音频设计</td>
+                </tr>
+                <tr>
+                    <td class="c-idx">4</td>
+                    <td class="c-name">魔法表情</td>
+                    <td class="c-qty">5 项</td>
+                    <td class="c-dur">25s</td>
+                    <td class="c-price">¥2,000</td>
+                    <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">8,000</span></td>
+                    <td class="c-spec">
+                        <div class="spec-tags">
+                            <span class="tag"><span class="k">尺寸</span><span class="v">720P（拼接1280×1440）</span></span>
+                            <span class="tag"><span class="k">格式</span><span class="v">上下双通道MP4</span></span>
+                            <span class="tag"><span class="k">需求1</span><span class="v">下方为alpha透明通道</span></span>
+                        </div>
+                    </td>
+                    <td class="c-note">需音效设计，无需音乐</td>
+                </tr>
+                <tr>
+                    <td class="c-idx">5</td>
+                    <td class="c-name">全屏祝福</td>
+                    <td class="c-qty">1 项</td>
+                    <td class="c-dur">20s</td>
+                    <td class="c-price">¥2,200</td>
+                    <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">2,000</span></td>
+                    <td class="c-spec">
+                        <div class="spec-tags">
+                            <span class="tag"><span class="k">交付1</span><span class="v">1080P MP4</span></span>
+                            <span class="tag"><span class="k">交付2</span><span class="v">AE 工程</span></span>
+                        </div>
+                    </td>
+                    <td class="c-note">需音效设计，无需音乐</td>
+                </tr>
+                <tr>
+                    <td class="c-idx">6</td>
+                    <td class="c-name">音乐音效</td>
+                    <td class="c-qty">1 项</td>
+                    <td class="c-dur">全案</td>
+                    <td class="c-price">¥300</td>
+                    <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">300</span></td>
+                    <td class="c-spec">
+                        <div class="spec-tags">
+                            <span class="tag"><span class="k">需求1</span><span class="v">音频码流不低于320kbps</span></span>
+                            <span class="tag"><span class="k">需求2</span><span class="v">含第1、4、5项全案音频设计</span></span>
+                        </div>
+                    </td>
+                    <td class="c-note">全案音频设计</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td class="foot-label" colspan="4">总计（含税1%）</td>
+                    <td class="foot-amount" colspan="2"><span class="price-lg-symbol">¥</span><span class="price-lg">8,140</span></td>
+                    <td class="foot-note" colspan="2">一些整体备注</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</body>
+</html>

@@ -8,6 +8,8 @@ import {
   splitByRatio,
 } from "./lib/amount";
 import * as api from "./lib/api";
+import { QuoteData, sumPartner } from "./lib/quote";
+import { QuoteEditor } from "./components/QuoteEditor";
 
 const APP_VERSION = "2.0.0";
 
@@ -103,6 +105,8 @@ export function App() {
   const [selectedContact, setSelectedContact] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err" | "info"; text: string } | null>(null);
+  const [view, setView] = useState<"main" | "quote">("main");
+  const [quoteDraft, setQuoteDraft] = useState<QuoteData | null>(null);
 
   const payMismatch = useMemo(() => {
     const total = parseAmount(form["替换的总费用"] || "");
@@ -302,9 +306,9 @@ export function App() {
         output_dir: outputDir,
         output_name: outputName,
       });
-      setMsg({ type: "ok", text: `DOCX 已生成：\n${res.docx || res.path}` });
+      setMsg({ type: "ok", text: `DOCX 已生成：${res.docx || res.path}` });
     } catch (e: any) {
-      setMsg({ type: "err", text: String(e?.message || e) });
+      setMsg({ type: "err", text: String(e?.message || e).replace(/\s+/g, " ").trim() });
     } finally {
       setBusy(false);
     }
@@ -324,18 +328,44 @@ export function App() {
         res.pdf_engine === "wps"
           ? "WPS"
           : res.pdf_engine === "word"
-            ? "Microsoft Word"
+            ? "Word"
             : res.pdf_engine || "未知";
       setMsg({
         type: "ok",
-        text: `PDF 已导出（引擎: ${engine}）：\n${res.pdf}\n\n同时生成 DOCX：\n${res.docx}`,
+        text: `PDF 已导出（${engine}）：${res.pdf}`,
       });
     } catch (e: any) {
-      setMsg({ type: "err", text: String(e?.message || e) });
+      // 后端可能多行提示，界面只保留首行摘要
+      const raw = String(e?.message || e);
+      const oneLine = raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0] || raw;
+      setMsg({ type: "err", text: oneLine });
     } finally {
       setBusy(false);
     }
   };
+
+  if (view === "quote") {
+    return (
+      <QuoteEditor
+        projectName={form["替换的项目名称"] || ""}
+        initial={quoteDraft}
+        onBack={() => setView("main")}
+        onSaved={(imagePath, data) => {
+          setQuoteDraft(data);
+          const total = sumPartner(data.rows);
+          setForm((prev) => {
+            let next = { ...prev, "替换的费用表格图片": imagePath };
+            if (total > 0) {
+              next = applySplitFromTotal(String(total), ratio, next);
+            }
+            return next;
+          });
+          setView("main");
+          setMsg({ type: "ok", text: `报价表已填入：${imagePath}` });
+        }}
+      />
+    );
+  }
 
   return (
     <div className="dm-root">
@@ -428,9 +458,18 @@ export function App() {
                         onChange={(e) => setField(f.key, e.target.value)}
                       />
                       {f.pick === "image" && (
-                        <button type="button" className="dm-btn" onClick={pickImage}>
-                          选择
-                        </button>
+                        <>
+                          <button type="button" className="dm-btn" onClick={pickImage}>
+                            选择
+                          </button>
+                          <button
+                            type="button"
+                            className="dm-btn dm-btn-outline"
+                            onClick={() => setView("quote")}
+                          >
+                            制作报价表
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

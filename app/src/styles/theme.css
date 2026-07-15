@@ -21,10 +21,17 @@
 html, body, #root {
   margin: 0;
   height: 100%;
+  min-height: 100vh;
+  width: 100%;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 13px;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
 }
 
 /* 滚动条 */
@@ -355,8 +362,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .dm-root {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   height: 100%;
-  min-height: 0;
+  min-height: 100vh;
+  width: 100%;
   background: var(--bg);
   color: var(--text);
 }
@@ -636,9 +645,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .dm-msg {
   margin: 0;
   font-size: 12px;
-  white-space: pre-wrap;
   line-height: 1.4;
   flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dm-msg.ok { color: var(--success); }
 .dm-msg.err { color: #e07070; }
@@ -684,4 +695,150 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   border-color: #302d36;
   color: #585460;
   cursor: not-allowed;
+}
+
+/* ════════════ 报价表编辑页 ════════════ */
+.qe-root { min-height: 100vh; }
+.qe-header {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.qe-header-title {
+  flex: 1;
+  text-align: center;
+  color: var(--primary-text);
+  font-weight: 600;
+  font-size: 14px;
+}
+.qe-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  overflow: hidden;
+}
+.qe-editor {
+  flex: 0 0 420px;
+  width: 420px;
+  min-width: 360px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.qe-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.qe-meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.qe-total-hint {
+  color: var(--primary-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.qe-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+.qe-row-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qe-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.qe-row-no {
+  color: var(--primary-text);
+  font-weight: 600;
+  font-size: 13px;
+}
+.qe-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.qe-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.qe-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.qe-span2 { grid-column: 1 / -1; }
+.qe-specs {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qe-specs-title { font-size: 12px; color: var(--text-dim); }
+.qe-spec-add { display: flex; flex-wrap: wrap; gap: 6px; }
+.qe-spec-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.qe-spec-kind {
+  flex: 0 0 40px;
+  color: var(--primary-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.qe-empty { font-size: 12px; color: var(--text-muted); }
+.qe-toolbar {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+.qe-preview-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.qe-preview-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.qe-preview-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: #2a2830;
+  padding: 12px;
 }

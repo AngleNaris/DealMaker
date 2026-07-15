@@ -68,3 +68,7 @@ export function ping() {
     pdf_engines?: { wps: boolean; word: boolean };
   }>("ping");
 }
+
+export function saveQuoteImage(params: { base64: string; filename?: string }) {
+  return backend<{ path: string; size: number }>("save_quote_image", params);
+}
