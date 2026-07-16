@@ -102,10 +102,12 @@ python -m backend.cli ping
 DealMaker/
   app/                 # Tauri + React 前端
   backend/             # Python 业务逻辑 CLI
-  _合同模板.docx
+  _合同模板.docx       # 本地私有，不进 git（自行准备）
   officecli.exe        # 不进 git，需自行下载
   合同生成工具.py      # 旧版 PyQt6（已迁移，可参考）
 ```
+
+**勿提交：** 合同 Word 模板（`*.docx`）、用户数据（`.contract_tool/`）、任何 `.exe`。
 
 ## OfficeCLI
 
