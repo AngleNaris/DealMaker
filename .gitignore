@@ -17,23 +17,31 @@ release/
 *.manifest
 app/src-tauri/resources/
 
-# Binaries (download separately; keep in project locally)
+# Binaries (download separately; keep locally, never commit)
 *.exe
-!officecli.exe.old
+*.exe.old
+officecli.exe
+officecli.exe.old
+dealmaker-backend.exe
+
+# Private / local document templates — DO NOT commit
+*.docx
+*_合同模板*
+*合同模板*
+# keep intentional sample assets only under assets/ if needed (none currently)
 
 # Temp / test outputs
 tmp/
 tmp_*/
 tmp_test/
 *.log
-_test_*.docx
 _test_*.json
 _batch_cmds.json
 _debug_ph.txt
-test_fix_output.docx
-2026*_*.docx
+_inspect.py
+_inspect2.py
 
-# Local user data
+# Local user data (contacts, projects, settings, quotes)
 .contract_tool/
 
 # Node / Tauri
@@ -42,19 +50,24 @@ app/dist/
 app/src-tauri/target/
 app/src-tauri/gen/
 
-# IDE
+# IDE / agent
 .vscode/
 .idea/
 *.swp
 *.swo
 .claude/
 .cursor/
+.grok/
 
 # OS
 Thumbs.db
 Desktop.ini
 .DS_Store
 
+# Generated exports
 *.pdf
 !assets/**
 
+# Versioned local release copies
+DealMaker_*_portable.exe
+DealMaker_*_x64-setup.exe
