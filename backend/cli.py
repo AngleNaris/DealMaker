@@ -13,8 +13,22 @@ import os
 import sys
 from typing import Any, Dict
 
+# Windows 子进程管道默认可能是 GBK，强制 UTF-8，避免前端收到乱码
+def _force_utf8_stdio() -> None:
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    os.environ.setdefault("PYTHONUTF8", "1")
+    for stream in (sys.stdout, sys.stderr, sys.stdin):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+
+_force_utf8_stdio()
+
 from backend.core import (
     ContactManager,
+    ProjectStore,
     TemplateProcessor,
     amount_to_chinese,
     auto_fix_final,
@@ -82,11 +96,36 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "load_settings":
         settings = load_settings()
-        if not settings.get("template_path"):
+        tpl = (settings.get("template_path") or "").strip()
+        # 路径不存在时（含历史 PowerShell 乱码路径）回退默认模板
+        if not tpl or not os.path.isfile(tpl):
             dt = default_template_path()
             if dt:
                 settings["template_path"] = dt
+                settings["_template_reset"] = True
         return _ok(settings)
+
+    if action == "bootstrap":
+        """启动一次加载 settings + contacts + projects，减少进程冷启动次数。"""
+        settings = load_settings()
+        tpl = (settings.get("template_path") or "").strip()
+        if not tpl or not os.path.isfile(tpl):
+            dt = default_template_path()
+            if dt:
+                settings["template_path"] = dt
+                settings["_template_reset"] = True
+        cm = ContactManager()
+        store = ProjectStore()
+        return _ok(
+            {
+                "settings": settings,
+                "contacts": {
+                    "names": cm.get_names(),
+                    "contacts": cm.contacts,
+                },
+                "projects": store.list_summaries(),
+            }
+        )
 
     if action == "save_settings":
         save_settings(payload.get("settings") or payload)
@@ -106,11 +145,11 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "save_contact":
         data = payload.get("data") or payload
-        name = data.get("替换的乙方名称", "") or data.get("乙方名称", "")
+        name = (data.get("替换的乙方名称", "") or data.get("乙方名称", "")).strip()
         if not name:
             return _err("请先填写乙方名称")
         cm = ContactManager()
-        cm.add_contact(data)
+        cm.add_contact(data)  # 内部仅保留乙方字段
         return _ok({"name": name, "names": cm.get_names()})
 
     if action == "delete_contact":
@@ -143,6 +182,46 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             return _ok(result)
         except Exception as e:
             return _err(str(e))
+
+    if action == "list_projects":
+        store = ProjectStore()
+        return _ok({"projects": store.list_summaries()})
+
+    if action == "get_project":
+        pid = payload.get("id") or ""
+        if not pid:
+            return _err("缺少项目 id")
+        store = ProjectStore()
+        proj = store.get(pid)
+        if not proj:
+            return _err("项目不存在")
+        return _ok(proj)
+
+    if action == "save_project":
+        """按 合同编号+项目名称 新建或更新项目快照。"""
+        try:
+            store = ProjectStore()
+            result = store.upsert(payload)
+            return _ok(
+                {
+                    "action": result["action"],
+                    "project": result["project"],
+                    "projects": store.list_summaries(),
+                }
+            )
+        except ValueError as e:
+            return _err(str(e))
+        except Exception as e:
+            return _err(str(e))
+
+    if action == "delete_project":
+        pid = payload.get("id") or ""
+        if not pid:
+            return _err("缺少项目 id")
+        store = ProjectStore()
+        if not store.delete(pid):
+            return _err("项目不存在")
+        return _ok({"projects": store.list_summaries()})
 
     if action == "save_quote_image":
         """保存报价表 PNG（base64）到 .contract_tool/quotes/"""
@@ -225,7 +304,14 @@ def main() -> int:
         return 1
 
     result = dispatch(action, payload)
-    print(json.dumps(result, ensure_ascii=False))
+    # 显式 UTF-8 写出，避免 Windows 管道用系统代码页
+    out = json.dumps(result, ensure_ascii=False)
+    try:
+        sys.stdout.buffer.write(out.encode("utf-8"))
+        sys.stdout.buffer.write(b"\n")
+        sys.stdout.buffer.flush()
+    except Exception:
+        print(out)
     return 0 if result.get("ok") else 1
 
 

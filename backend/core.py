@@ -18,14 +18,22 @@ from docx.shared import Inches, Pt
 
 
 def project_root() -> str:
-    """backend/ 的上一级目录。"""
+    """
+    资源根目录（officecli、模板所在）：
+    - 环境变量 DEALMAKER_ROOT（Tauri 启动后端时注入）
+    - 打包后：后端 exe 同级目录
+    - 开发：backend/ 上一级
+    """
+    env = os.environ.get("DEALMAKER_ROOT")
+    if env and os.path.isdir(env):
+        return env
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def get_app_dir() -> str:
-    """可写配置目录所在根：打包后用 exe 旁，否则用项目根。"""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
+    """可写配置目录所在根：与 project_root 一致（exe 旁 .contract_tool）。"""
     return project_root()
 
 
@@ -34,23 +42,31 @@ def get_config_dir() -> str:
 
 
 def get_officecli_path() -> str:
-    """获取 officecli 可执行文件路径。"""
+    """获取 officecli 可执行文件路径。
+
+    优先：DEALMAKER_RUNTIME（主程序解压到 LocalAppData 的依赖目录）
+    其次：DEALMAKER_ROOT / 开发仓库 / 旧版同目录布局
+    """
+    candidates = []
+    runtime = os.environ.get("DEALMAKER_RUNTIME")
+    if runtime:
+        candidates.append(os.path.join(runtime, "officecli.exe"))
+    root = project_root()
+    candidates.extend(
+        [
+            os.path.join(root, "officecli.exe"),
+            os.path.join(root, "resources", "officecli.exe"),
+            os.path.join(root, "_internal", "officecli.exe"),
+        ]
+    )
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
-            p = os.path.join(meipass, "officecli.exe")
-            if os.path.exists(p):
-                return p
-        base = os.path.dirname(sys.executable)
-        for p in (
-            os.path.join(base, "_internal", "officecli.exe"),
-            os.path.join(base, "officecli.exe"),
-        ):
-            if os.path.exists(p):
-                return p
-    p = os.path.join(project_root(), "officecli.exe")
-    if os.path.exists(p):
-        return p
+            candidates.insert(0, os.path.join(meipass, "officecli.exe"))
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "officecli.exe"))
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
     return "officecli"
 
 
@@ -301,6 +317,32 @@ class TemplateProcessor:
                         run.font.size = Pt(12)
 
 
+# 联系人仅保存乙方信息（不含合同编号/项目/服务/费用等项目字段）
+CONTACT_FIELD_KEYS = (
+    "替换的乙方名称",
+    "乙方名称",  # 兼容旧键
+    "乙方银行账号",
+    "乙方银行开户行",
+    "替换的乙方代表名称",
+    "替换的乙方代表电话",
+    "替换的乙方代表邮箱",
+    "乙方地址",
+)
+
+
+def pick_contact_fields(data: Dict) -> Dict:
+    """从完整表单中提取联系人字段。"""
+    out: Dict = {}
+    for k in CONTACT_FIELD_KEYS:
+        if k in data and data[k] is not None:
+            out[k] = data[k]
+    name = (out.get("替换的乙方名称") or out.get("乙方名称") or "").strip()
+    if name:
+        out["替换的乙方名称"] = name
+        out.pop("乙方名称", None)
+    return out
+
+
 class ContactManager:
     def __init__(self, config_dir: Optional[str] = None):
         self.config_dir = config_dir or get_config_dir()
@@ -312,7 +354,9 @@ class ContactManager:
         if os.path.exists(self.contacts_file):
             try:
                 with open(self.contacts_file, "r", encoding="utf-8") as f:
-                    self.contacts = json.load(f)
+                    raw = json.load(f)
+                # 读入时规范化为仅乙方字段（旧数据里可能混有项目信息）
+                self.contacts = [pick_contact_fields(c) for c in (raw or []) if isinstance(c, dict)]
             except Exception:
                 self.contacts = []
         else:
@@ -327,6 +371,7 @@ class ContactManager:
         return contact.get("替换的乙方名称", "") or contact.get("乙方名称", "")
 
     def add_contact(self, contact: Dict):
+        contact = pick_contact_fields(contact or {})
         name = self._get_company_name(contact)
         if not name:
             return
@@ -370,14 +415,161 @@ def save_settings(settings: Dict) -> None:
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
 
+# ---------- 历史项目（应用内数据，与导出文件无关）----------
+
+def make_project_key(contract_no: str, project_name: str) -> str:
+    """合同编号 + 项目名称 组成唯一键。"""
+    return f"{(contract_no or '').strip()}||{(project_name or '').strip()}"
+
+
+class ProjectStore:
+    """合同/报价填写快照存储。"""
+
+    def __init__(self, config_dir: Optional[str] = None):
+        self.config_dir = config_dir or get_config_dir()
+        self.path = os.path.join(self.config_dir, "projects.json")
+        self.projects: List[Dict] = []
+        self.load()
+
+    def load(self) -> None:
+        if os.path.exists(self.path):
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.projects = data if isinstance(data, list) else data.get("projects", [])
+            except Exception:
+                self.projects = []
+        else:
+            self.projects = []
+
+    def save(self) -> None:
+        os.makedirs(self.config_dir, exist_ok=True)
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump(self.projects, f, ensure_ascii=False, indent=2)
+
+    def list_summaries(self) -> List[Dict]:
+        """列表用摘要，按更新时间倒序。"""
+        items = sorted(
+            self.projects,
+            key=lambda p: p.get("updated_at") or "",
+            reverse=True,
+        )
+        out = []
+        for p in items:
+            out.append(
+                {
+                    "id": p.get("id"),
+                    "key": p.get("key"),
+                    "contract_no": p.get("contract_no", ""),
+                    "project_name": p.get("project_name", ""),
+                    "party_b": p.get("party_b", ""),
+                    "updated_at": p.get("updated_at", ""),
+                    "label": self._label(p),
+                }
+            )
+        return out
+
+    def _label(self, p: Dict) -> str:
+        no = (p.get("contract_no") or "").strip() or "无编号"
+        name = (p.get("project_name") or "").strip() or "未命名项目"
+        return f"{no} · {name}"
+
+    def get(self, project_id: str) -> Optional[Dict]:
+        for p in self.projects:
+            if p.get("id") == project_id:
+                return p
+        return None
+
+    def get_by_key(self, key: str) -> Optional[Dict]:
+        for p in self.projects:
+            if p.get("key") == key:
+                return p
+        return None
+
+    def upsert(self, snapshot: Dict) -> Dict:
+        """
+        按 合同编号+项目名称 键保存。
+        键已存在 → 更新原项目；否则新建。
+        snapshot 字段见 CLI。
+        """
+        import uuid
+        from datetime import datetime, timezone
+
+        contract_no = (snapshot.get("contract_no") or "").strip()
+        project_name = (snapshot.get("project_name") or "").strip()
+        if not contract_no and not project_name:
+            raise ValueError("请至少填写合同编号或项目名称后再保存项目")
+
+        key = make_project_key(contract_no, project_name)
+        now = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        form = snapshot.get("form") or {}
+        party_b = (
+            form.get("替换的乙方名称")
+            or form.get("乙方名称")
+            or snapshot.get("party_b")
+            or ""
+        )
+
+        existing = self.get_by_key(key)
+        if existing:
+            existing.update(
+                {
+                    "contract_no": contract_no,
+                    "project_name": project_name,
+                    "party_b": party_b,
+                    "form": form,
+                    "ratio": snapshot.get("ratio", 50),
+                    "quote": snapshot.get("quote"),
+                    "template_path": snapshot.get("template_path") or "",
+                    "output_dir": snapshot.get("output_dir") or "",
+                    "output_name": snapshot.get("output_name") or "",
+                    "updated_at": now,
+                }
+            )
+            self.save()
+            return {"action": "updated", "project": existing}
+
+        proj = {
+            "id": str(uuid.uuid4()),
+            "key": key,
+            "contract_no": contract_no,
+            "project_name": project_name,
+            "party_b": party_b,
+            "form": form,
+            "ratio": snapshot.get("ratio", 50),
+            "quote": snapshot.get("quote"),
+            "template_path": snapshot.get("template_path") or "",
+            "output_dir": snapshot.get("output_dir") or "",
+            "output_name": snapshot.get("output_name") or "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        self.projects.append(proj)
+        self.save()
+        return {"action": "created", "project": proj}
+
+    def delete(self, project_id: str) -> bool:
+        before = len(self.projects)
+        self.projects = [p for p in self.projects if p.get("id") != project_id]
+        if len(self.projects) < before:
+            self.save()
+            return True
+        return False
+
+
+
 def default_template_path() -> Optional[str]:
-    candidates = []
+    root = get_app_dir()
+    candidates = [
+        os.path.join(root, "_合同模板.docx"),
+        os.path.join(root, "resources", "_合同模板.docx"),
+        os.path.join(root, "contract_template.docx"),
+    ]
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        candidates.append(os.path.join(meipass, "_合同模板.docx"))
-    candidates.append(os.path.join(get_app_dir(), "_合同模板.docx"))
+        candidates.insert(0, os.path.join(meipass, "_合同模板.docx"))
     for p in candidates:
-        if os.path.exists(p):
+        if os.path.isfile(p):
             return p
     return None
 

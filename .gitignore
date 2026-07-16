@@ -8,10 +8,14 @@ __pycache__/
 # Build artifacts
 build/
 build_*/
+build_backend/
 dist/
 dist_*/
+dist_backend/
+release/
 *.spec.bak
 *.manifest
+app/src-tauri/resources/
 
 # Binaries (download separately; keep in project locally)
 *.exe

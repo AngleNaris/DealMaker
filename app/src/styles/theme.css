@@ -499,22 +499,34 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 
 .dm-left {
-  width: 220px;
-  min-width: 190px;
-  flex: 0 0 220px;
+  width: 260px;
+  min-width: 240px;
+  flex: 0 0 260px;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  gap: 10px;
 }
-.dm-left .dm-contact-group {
-  flex: 1 1 auto;
-  min-height: 0;
+.dm-left .dm-contact-group,
+.dm-left .dm-project-group {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: 12px;
-  gap: 10px;
+  padding: 10px 10px 12px;
+  gap: 8px;
+  min-height: unset;
+}
+/* 联系人占剩余空间，历史项目固定可见 */
+.dm-left .dm-contact-group {
+  flex: 1 1 auto;
+  min-height: 140px;
+}
+.dm-left .dm-project-group {
+  flex: 0 0 auto;
+  min-height: 200px;
 }
 
 /* 保存 / 新建 / 删除 等宽同高 */
@@ -533,7 +545,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 
 .dm-contact-list {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 100px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   overflow-y: auto;
@@ -697,7 +709,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   cursor: not-allowed;
 }
 
-/* ════════════ 报价表编辑页 ════════════ */
+/* ════════════ 报价表编辑页（表格内联编辑） ════════════ */
 .qe-root { min-height: 100vh; }
 .qe-header {
   justify-content: space-between;
@@ -712,133 +724,65 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   font-weight: 600;
   font-size: 14px;
 }
-.qe-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: row;
-  gap: 12px;
-  padding: 12px 14px 14px;
-  overflow: hidden;
-}
-.qe-editor {
-  flex: 0 0 420px;
-  width: 420px;
-  min-width: 360px;
-  max-width: 480px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-}
-.qe-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-.qe-meta label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.qe-total-hint {
-  color: var(--primary-text);
-  font-size: 13px;
-  font-weight: 600;
-}
-.qe-rows {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-right: 2px;
-}
-.qe-row-card {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.qe-row-head {
+.qe-header-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
-.qe-row-no {
-  color: var(--primary-text);
-  font-weight: 600;
-  font-size: 13px;
-}
-.qe-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.qe-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.qe-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.qe-span2 { grid-column: 1 / -1; }
-.qe-specs {
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.qe-specs-title { font-size: 12px; color: var(--text-dim); }
-.qe-spec-add { display: flex; flex-wrap: wrap; gap: 6px; }
-.qe-spec-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.qe-spec-kind {
-  flex: 0 0 40px;
-  color: var(--primary-text);
-  font-size: 12px;
-  font-weight: 600;
-}
-.qe-empty { font-size: 12px; color: var(--text-muted); }
-.qe-toolbar {
-  display: flex;
-  gap: 8px;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-}
-.qe-preview-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
-}
-.qe-preview-label {
-  color: var(--text-muted);
-  font-size: 12px;
-  flex: 0 0 auto;
-}
-.qe-preview-scroll {
+.qe-table-page {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  border: 1px solid var(--border);
+  padding: 16px;
   background: #2a2830;
-  padding: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.qe-hint {
+  padding: 6px 14px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+/* 历史项目列表（固定高度，防止被 flex 挤没） */
+.dm-project-list {
+  flex: 0 0 auto !important;
+  height: 168px !important;
+  min-height: 168px !important;
+  max-height: 168px !important;
+}
+.dm-project-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  white-space: normal;
+}
+.dm-project-label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  width: 100%;
+}
+.dm-project-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  width: 100%;
+}
+.dm-project-list li.active .dm-project-sub,
+.dm-project-list li.active .dm-project-time {
+  color: rgba(191, 171, 241, 0.85);
+}
+.dm-project-time {
+  font-size: 10px;
+  color: var(--text-muted);
 }

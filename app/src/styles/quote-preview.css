@@ -1,4 +1,4 @@
-/* 报价表预览区：复刻 报价明细.html 白底样式（导出截图用） */
+/* 报价表：严格对齐 报价明细.html 模板（导出与预览共用） */
 
 .quote-capture {
   padding: 24px 28px;
@@ -20,6 +20,8 @@
   border-collapse: collapse;
   border: 1px solid #000000;
   font-size: 12.5px;
+  /* 与模板一致：不用 fixed，由列宽类控制 */
+  table-layout: auto;
 }
 
 .quote-capture .title-row td {
@@ -37,8 +39,10 @@
   border: 1px solid #000000;
   background: #ececec;
   color: #000000;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Heiti SC", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
   font-weight: 700;
   font-size: 12.5px;
+  font-style: normal;
   text-align: center !important;
   vertical-align: middle;
   padding: 8px 6px;
@@ -52,6 +56,7 @@
   color: #000000;
 }
 
+/* 列宽与模板一致 */
 .quote-capture .c-idx { width: 42px; }
 .quote-capture .c-name { width: 132px; }
 .quote-capture .c-qty { width: 64px; }
@@ -62,32 +67,51 @@
 .quote-capture .c-note { width: 124px; }
 
 .quote-capture tbody .c-idx { text-align: center; }
-.quote-capture tbody .c-name { text-align: center; font-weight: 600; }
+.quote-capture tbody .c-name {
+  text-align: center;
+  font-weight: 600;
+  /* 长服务名在列内换行，不撑破表格 */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .quote-capture tbody .c-qty { text-align: center; }
 .quote-capture tbody .c-dur { text-align: center; }
 .quote-capture tbody .c-price {
   text-align: right;
-  font-family: Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
   font-size: 14px;
 }
 .quote-capture tbody .c-partner { text-align: right; }
 .quote-capture tbody .c-spec { text-align: left; }
-.quote-capture tbody .c-note { text-align: left; font-size: 11px; }
+.quote-capture tbody .c-note {
+  text-align: left;
+  font-size: 11px;
+  color: #000000;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 
 .quote-capture .price-lg {
-  font-family: Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.3px;
 }
 .quote-capture .price-lg-symbol {
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: 15px;
   font-weight: 700;
   margin-right: 1px;
 }
 
-.quote-capture .spec-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; }
+/* 标签：整块 nowrap，过长时整块换到下一行（与模板一致） */
+.quote-capture .spec-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+  align-items: flex-start;
+}
 .quote-capture .tag {
   display: inline-flex;
   align-items: center;
@@ -98,9 +122,21 @@
   line-height: 1.6;
   white-space: nowrap;
   color: #000000;
+  max-width: 100%;
 }
-.quote-capture .tag .k { font-weight: 700; margin-right: 4px; }
-.quote-capture .tag .v { color: #000000; }
+.quote-capture .tag .k {
+  font-weight: 700;
+  margin-right: 4px;
+  color: #000000;
+  flex: 0 0 auto;
+}
+.quote-capture .tag .v {
+  color: #000000;
+  /* 极长时允许在标签内断词，避免撑破整页 */
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 
 .quote-capture tfoot td {
   border: 1px solid #000000;
@@ -112,6 +148,322 @@
 }
 .quote-capture .foot-label { text-align: center; }
 .quote-capture .foot-amount { text-align: right; }
-.quote-capture .foot-amount .price-lg { font-size: 17px; }
-.quote-capture .foot-amount .price-lg-symbol { font-size: 16px; }
-.quote-capture .foot-note { text-align: center; font-weight: 400; }
+.quote-capture .foot-amount .price-lg {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+  font-size: 17px;
+  font-weight: 700;
+}
+.quote-capture .foot-amount .price-lg-symbol {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+}
+.quote-capture .foot-note {
+  text-align: center;
+  font-weight: 400;
+  color: #000000;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 离屏导出节点：不可见但不 display:none（html2canvas 需要尺寸） */
+.quote-export-host {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* 导出专用：零 padding、贴表格；细线框（scale=2 时 0.5px → 1 设备像素） */
+.quote-capture--export {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: max-content !important;
+  max-width: none !important;
+  background: #ffffff;
+  display: inline-block;
+  line-height: 1.4;
+}
+.quote-capture--export table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  /* 外框用 0.5px，避免 html2canvas 2x 采样后边框发粗 */
+  border: 0.5px solid #000000;
+  margin: 0;
+}
+.quote-capture--export thead th,
+.quote-capture--export tbody td,
+.quote-capture--export tfoot td,
+.quote-capture--export .title-row td {
+  border: 0.5px solid #000000 !important;
+}
+
+/* ===== 仅编辑态（不影响导出预览）===== */
+.quote-editable .qc-static { display: none; }
+.quote-editable .c-ops {
+  width: 52px;
+  text-align: center;
+  background: #fafafa;
+}
+
+.quote-editable .qc-cell-input {
+  width: 100%;
+  border: 1px dashed transparent;
+  background: transparent;
+  color: #000;
+  font: inherit;
+  text-align: inherit;
+  padding: 2px 4px;
+  outline: none;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.quote-editable .qc-cell-input:hover {
+  border-color: #bbb;
+  background: #fafafa;
+}
+.quote-editable .qc-cell-input:focus {
+  border-color: #4f378b;
+  background: #fff;
+  box-shadow: 0 0 0 1px #4f378b;
+}
+.quote-editable .qc-title-input {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  width: 100%;
+}
+.quote-editable .qc-num {
+  text-align: center;
+  font-family: Consolas, "Courier New", monospace;
+}
+.quote-editable .qc-num::-webkit-outer-spin-button,
+.quote-editable .qc-num::-webkit-inner-spin-button {
+  opacity: 1;
+  height: 1.4em;
+}
+.quote-editable tbody .c-price .qc-num,
+.quote-editable tbody .c-partner .qc-num { text-align: right; }
+
+.quote-editable .qc-edit-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  justify-content: flex-end;
+}
+.quote-editable .qc-prefix {
+  font-weight: 600;
+  color: #000;
+  flex: 0 0 auto;
+}
+
+.quote-editable .tag-edit {
+  gap: 2px;
+  padding-right: 2px;
+  cursor: grab;
+  /* 编辑时也尽量保持标签横排 */
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
+.quote-editable .tag-edit:active { cursor: grabbing; }
+
+.quote-editable .qc-tag-input {
+  border: none;
+  border-bottom: 1px dashed #999;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  min-width: 48px;
+  max-width: 220px;
+  padding: 0 2px;
+  outline: none;
+  color: #000;
+  white-space: nowrap;
+}
+.quote-editable .qc-tag-input:focus {
+  border-bottom-color: #4f378b;
+}
+.quote-editable .qc-textarea {
+  resize: vertical;
+  min-height: 1.6em;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  field-sizing: content;
+}
+.quote-editable .qc-tag-x {
+  border: none;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+}
+.quote-editable .qc-tag-x:hover { color: #c00; }
+
+.quote-editable .qc-tag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 6px;
+}
+.quote-editable .qc-tag-add {
+  border: 1px dashed #aaa;
+  background: #fff;
+  color: #444;
+  font-size: 11px;
+  padding: 0 5px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+.quote-editable .qc-tag-add:hover {
+  border-color: #4f378b;
+  color: #4f378b;
+}
+.quote-editable .qc-tag-copy-all {
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed #4f378b;
+  color: #4f378b;
+  background: #f7f3ff;
+  font-size: 11px;
+  padding: 0 6px;
+  cursor: grab;
+  line-height: 1.6;
+  user-select: none;
+}
+.quote-editable .qc-tag-copy-all:hover { background: #efe8ff; }
+.quote-editable .qc-tag-copy-all:active { cursor: grabbing; }
+
+.quote-editable .qc-del-row {
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.quote-editable .qc-del-row:hover {
+  border-color: #c00;
+  color: #c00;
+}
+
+.quote-editable .qc-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  user-select: none;
+  color: #666;
+  font-size: 12px;
+  letter-spacing: -2px;
+  padding: 2px 4px;
+  margin-right: 2px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.quote-editable .qc-drag-handle:hover {
+  background: #e8e0f5;
+  color: #4f378b;
+}
+.quote-editable .qc-drag-handle:active { cursor: grabbing; }
+.quote-editable .qc-idx-num { vertical-align: middle; }
+
+.quote-editable tr.qc-row-drag-over > td {
+  background: #efe8ff !important;
+  box-shadow: inset 0 2px 0 #4f378b;
+}
+.quote-editable .c-spec.qc-spec-cell-active,
+.quote-editable tr.qc-spec-drop-over .c-spec {
+  outline: 2px dashed #4f378b;
+  outline-offset: -2px;
+  background: #f7f3ff;
+}
+
+.quote-editable .qc-tag-grip {
+  cursor: grab;
+  user-select: none;
+  color: #888;
+  font-size: 11px;
+  padding: 0 3px 0 0;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+.quote-editable .qc-tag-grip:hover { color: #4f378b; }
+.quote-editable .qc-tag-grip:active { cursor: grabbing; }
+
+.quote-editable button.qc-tag-copy-all {
+  cursor: pointer;
+  font-family: inherit;
+}
+.quote-editable .qc-tag-paste {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--primary, #4f378b);
+  color: #4f378b;
+  background: #efe8ff;
+  font-size: 11px;
+  padding: 0 6px;
+  cursor: pointer;
+  line-height: 1.6;
+  font-family: inherit;
+}
+.quote-editable .qc-tag-paste:hover {
+  background: #e0d4ff;
+}
+
+/* 标签拖放排序高亮：插到该卡片前 */
+.quote-editable .tag.qc-tag-drop-before {
+  box-shadow: -3px 0 0 #4f378b;
+  background: #f3eeff;
+}
+.quote-editable .tag.tag-edit {
+  cursor: grab;
+  user-select: none;
+}
+.quote-editable .tag.tag-edit:active {
+  cursor: grabbing;
+  opacity: 0.85;
+}
+.quote-editable .tag.tag-edit .qc-tag-input {
+  cursor: text;
+  user-select: text;
+}
+
+/* 指针拖拽（非 HTML5 DnD） */
+.qe-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+.qe-dragging * {
+  cursor: grabbing !important;
+}
+.qc-ptr-ghost {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  padding: 4px 10px;
+  background: #4f378b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 2px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quote-editable .tag.tag-edit {
+  cursor: grab;
+  touch-action: none;
+}
+.quote-editable .qc-drag-handle {
+  touch-action: none;
+  cursor: grab;
+}

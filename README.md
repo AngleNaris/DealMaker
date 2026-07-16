@@ -34,9 +34,57 @@ npm install
 
 # 开发模式
 npm run tauri dev
-# 或
-.\dev-tauri.bat
+# 或根目录
+.\dev.bat
 ```
+
+## 版本号（单一来源）
+
+仓库根目录 `VERSION` 为唯一版本源。修改后执行：
+
+```powershell
+node .\sync_version.js              # 按 VERSION 同步到各配置
+# 或
+node .\sync_version.js 2.2.0        # 写入 VERSION 并同步
+# 或
+.\sync_version.ps1 -Version 2.2.0
+```
+
+会更新：`app/package.json`、`package-lock` 根版本、`Cargo.toml`、`tauri.conf.json`、`app/src/version.ts`。  
+**不会**改动依赖包版本。发布脚本 `build_release.ps1` 会自动先跑同步。
+
+## 发布打包（单文件便携版）
+
+```powershell
+# 在项目根执行（自动 sync 版本）
+.\build_release.ps1
+```
+
+产出：
+
+| 路径 | 说明 |
+|------|------|
+| `release\portable\DealMaker.exe` | **单文件**主程序（内嵌 backend + officecli） |
+| `release\DealMaker_*_x64-setup.exe` | 可选 NSIS 安装包 |
+
+### 运行时依赖（自动解压）
+
+首次启动或**版本升级**时，将内嵌依赖写入：
+
+`%LOCALAPPDATA%\DealMaker\runtime\`
+
+| 文件 | 说明 |
+|------|------|
+| `dealmaker-backend.exe` | 业务后端（python-docx） |
+| `officecli.exe` | 文档引擎 |
+| `.version` | 与主程序 `CARGO_PKG_VERSION` 对齐；版本变化则覆盖上述依赖 |
+
+**不内嵌合同模板**（体积与可替换性）：请在界面中选择模板，或自行把模板放到 exe 旁后选择。
+
+**不内置**（使用系统已安装）：WPS / Microsoft Word（仅导出 PDF 时需要其一）。  
+**报价表截图**：使用系统 Edge / Chrome（Windows 通常自带 Edge）。
+
+用户数据：`exe` 同级 `.contract_tool/`（联系人、历史项目、报价图、设置）。
 
 ## 后端 CLI（调试）
 

@@ -8,16 +8,19 @@ import {
 } from "../lib/quote";
 import "../styles/quote-preview.css";
 
-type Props = { data: QuoteData };
+type Props = { data: QuoteData; forExport?: boolean };
 
 export const QuotePreview = forwardRef<HTMLDivElement, Props>(function QuotePreview(
-  { data },
+  { data, forExport = false },
   ref
 ) {
   const total = sumPartner(data.rows);
 
   return (
-    <div className="quote-capture" ref={ref}>
+    <div
+      className={`quote-capture${forExport ? " quote-capture--export" : ""}`}
+      ref={ref}
+    >
       <table>
         <thead>
           <tr className="title-row">

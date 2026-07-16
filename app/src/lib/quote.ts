@@ -83,3 +83,33 @@ export function qtyLabel(qty: number): string {
   const n = Math.max(0, Math.floor(Number(qty) || 0));
   return `${n} 项`;
 }
+
+const QUOTE_DRAFT_KEY = "dealmaker_quote_draft_v1";
+
+export function loadQuoteDraft(): QuoteData | null {
+  try {
+    const raw = localStorage.getItem(QUOTE_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as QuoteData;
+    if (!parsed || !Array.isArray(parsed.rows)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveQuoteDraft(data: QuoteData): void {
+  try {
+    localStorage.setItem(QUOTE_DRAFT_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function clearQuoteDraft(): void {
+  try {
+    localStorage.removeItem(QUOTE_DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
