@@ -71,3 +71,8 @@ Desktop.ini
 # Versioned local release copies
 DealMaker_*_portable.exe
 DealMaker_*_x64-setup.exe
+
+# Legacy PyQt app (removed)
+合同生成工具.py
+DealMaker.spec
+__pycache__/
