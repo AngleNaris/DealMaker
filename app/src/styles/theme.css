@@ -72,6 +72,13 @@ input:focus, select:focus, textarea:focus {
 }
 input::placeholder, textarea::placeholder { color: var(--text-muted); }
 
+/* 费用信息与报价表总费用/税率不一致 */
+.dm-input-mismatch,
+input.dm-input-mismatch {
+  color: #e85d5d !important;
+  border-color: #8c1d18 !important;
+}
+
 /* 面板 */
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 
@@ -370,11 +377,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   color: var(--text);
 }
 
-/* 仅右侧作者署名 */
+/* 标题栏：左侧共编状态，右侧作者 */
 .dm-titlebar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 14px 0;
   flex: 0 0 auto;
 }
@@ -382,6 +390,19 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   font-size: 12px;
   color: var(--text-muted);
   letter-spacing: 0.02em;
+  flex: 0 0 auto;
+}
+.dm-coedit-hint {
+  font-size: 11px;
+  color: var(--primary-text);
+  letter-spacing: 0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dm-coedit-hint.dim {
+  color: var(--text-muted);
 }
 
 .dm-body {

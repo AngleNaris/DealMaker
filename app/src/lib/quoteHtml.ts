@@ -3,6 +3,7 @@
 import {
   QuoteData,
   formatMoney,
+  formatPrice,
   labeledSpecTags,
   qtyLabel,
   sumPartner,
@@ -143,15 +144,23 @@ export function buildQuoteHtml(data: QuoteData): string {
               )
               .join("")}</div>`
           : "—";
+      const unitCell =
+        row.unitPrice === "/"
+          ? "/"
+          : `¥${esc(formatMoney(row.unitPrice as number))}`;
+      const partnerCell =
+        row.partnerPrice === "/"
+          ? "/"
+          : `<span class="price-lg-symbol">¥</span><span class="price-lg">${esc(
+              formatMoney(row.partnerPrice as number)
+            )}</span>`;
       return `<tr>
   <td class="c-idx">${i + 1}</td>
   <td class="c-name">${esc(row.name || "—")}</td>
   <td class="c-qty">${esc(qtyLabel(row.qty))}</td>
   <td class="c-dur">${esc(row.duration || "/")}</td>
-  <td class="c-price">¥${esc(formatMoney(row.unitPrice))}</td>
-  <td class="c-partner"><span class="price-lg-symbol">¥</span><span class="price-lg">${esc(
-    formatMoney(row.partnerPrice)
-  )}</span></td>
+  <td class="c-price">${unitCell}</td>
+  <td class="c-partner">${partnerCell}</td>
   <td class="c-spec">${tagsHtml}</td>
   <td class="c-note">${esc(row.note || "")}</td>
 </tr>`;

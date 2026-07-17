@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   QuoteData,
   QuoteRow,
+  PriceValue,
   SPEC_TAG_KINDS,
   SpecTag,
   SpecTagKind,
@@ -9,19 +10,110 @@ import {
   defaultQuote,
   emptyRow,
   formatMoney,
+  formatPrice,
   labeledSpecTags,
   loadQuoteDraft,
+  parseTaxRateFromNote,
   qtyLabel,
+  quoteFormMismatch,
+  quotePngFilename,
   saveQuoteDraft,
   sumPartner,
   uid,
 } from "../lib/quote";
-import { buildQuoteHtml } from "../lib/quoteHtml";
-import { exportQuoteHtmlPng } from "../lib/api";
+import { exportQuotePng } from "../lib/api";
 import "../styles/quote-preview.css";
+
+/**
+ * 价格输入框：允许占位符 "/"（代表该项另行计价 / 暂不填，不计入合计）。
+ * 交互：
+ *  - 在 0 时继续向下滚动滚轮 → 设为 "/"
+ *  - 在 "/" 时向上滚动滚轮 → 回到 0
+ *  - 其它情况按 step 正常增减
+ * 使用原生非被动 wheel 监听，确保能 preventDefault 接管步进。
+ */
+function PriceInput({
+  value,
+  onCommit,
+  step = 1,
+}: {
+  value: PriceValue;
+  onCommit: (v: PriceValue) => void;
+  step?: number;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  const [text, setText] = useState<string>(value === "/" ? "/" : String(value));
+  const valRef = useRef<PriceValue>(value);
+  valRef.current = value;
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
+
+  // 外部值变化（AI / 工作区 / 撤销）同步到输入框文本
+  useEffect(() => {
+    setText(value === "/" ? "/" : String(value));
+  }, [value]);
+
+  // 原生非被动 wheel 监听：接管步进逻辑
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const dec = e.deltaY > 0; // 向下滚动 = 减少
+      const cur = valRef.current;
+      let next: PriceValue;
+      if (dec) {
+        if (cur === "/") next = "/";
+        else if ((cur as number) <= 0) next = "/"; // 0 时继续下滚 → "/"
+        else next = Math.max(0, (cur as number) - step);
+      } else {
+        if (cur === "/") next = 0; // "/" 时上滚 → 0
+        else next = (cur as number) + step;
+      }
+      commitRef.current(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [step]);
+
+  const commit = (raw: string) => {
+    const t = raw.trim();
+    if (t === "/") {
+      onCommit("/");
+      return;
+    }
+    if (t === "" || t === "-") {
+      onCommit(0);
+      return;
+    }
+    const n = parseFloat(t);
+    onCommit(Number.isFinite(n) ? n : 0);
+  };
+
+  return (
+    <input
+      ref={ref}
+      className="qc-cell-input qc-num"
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
 
 type Props = {
   projectName?: string;
+  /** 合同编号，用于报价图稳定文件名 */
+  contractNo?: string;
+  /** 合同表单总费用，用于默认值与一致性校验 */
+  formTotal?: number | null;
+  /** 合同表单税率 */
+  formTaxRate?: number | null;
   initial?: QuoteData | null;
   onBack: (draft: QuoteData) => void;
   onSaved: (imagePath: string, data: QuoteData) => void;
@@ -53,12 +145,26 @@ type DropHighlight =
   | { type: "row"; rowId: string }
   | { type: "spec"; rowId: string; beforeTagId: string | null };
 
-export function QuoteEditor({ projectName, initial, onBack, onSaved }: Props) {
+export function QuoteEditor({
+  projectName,
+  contractNo,
+  formTotal = null,
+  formTaxRate = null,
+  initial,
+  onBack,
+  onSaved,
+}: Props) {
+  const seedOpts = () => ({
+    projectName: projectName || "",
+    formTotal: formTotal ?? null,
+    formTaxRate: formTaxRate ?? null,
+  });
+
   const [data, setData] = useState<QuoteData>(() => {
     if (initial && initial.rows?.length) return initial;
     const saved = loadQuoteDraft();
     if (saved && saved.rows?.length) return saved;
-    return defaultQuote(projectName || "");
+    return defaultQuote(seedOpts());
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -79,19 +185,33 @@ export function QuoteEditor({ projectName, initial, onBack, onSaved }: Props) {
   const startPt = useRef({ x: 0, y: 0 });
 
   const total = useMemo(() => sumPartner(data.rows), [data.rows]);
+  const mismatch = useMemo(
+    () => quoteFormMismatch(data, formTotal ?? null, formTaxRate ?? null),
+    [data, formTotal, formTaxRate]
+  );
 
   useEffect(() => {
     const t = window.setTimeout(() => saveQuoteDraft(data), 300);
     return () => window.clearTimeout(t);
   }, [data]);
 
+  // 外部（AI/工作区）更新 initial 时同步进编辑器（父级用 key 强制刷新时也会 remount）
+  useEffect(() => {
+    if (initial && initial.rows?.length) {
+      setData(initial);
+    }
+  }, [initial]);
+
   const onNew = () => {
     if (!confirm("新建将清空当前报价表编辑内容，是否继续？")) return;
-    const fresh = defaultQuote(projectName || "");
+    const fresh = defaultQuote(seedOpts());
     setData(fresh);
     clearQuoteDraft();
     saveQuoteDraft(fresh);
-    setHint("已新建空白报价表");
+    const bits: string[] = ["已新建报价表"];
+    if (formTotal != null && formTotal > 0) bits.push(`总费用默认 ${formTotal}`);
+    if (formTaxRate != null) bits.push(`税率默认 ${formTaxRate}%`);
+    setHint(bits.join(" · "));
     setErr("");
   };
 
@@ -401,11 +521,12 @@ export function QuoteEditor({ projectName, initial, onBack, onSaved }: Props) {
     setBusy(true);
     setErr("");
     try {
-      const html = buildQuoteHtml(data);
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const res = await exportQuoteHtmlPng({
-        html,
-        filename: `报价表_${stamp}.png`,
+      // 与 CLI 共用后端 Edge 截图路径，避免 html2canvas 边框/文字发粗、效果不一致
+      const res = await exportQuotePng({
+        quote: data,
+        filename: quotePngFilename(projectName, contractNo),
+        projectName,
+        contractNo,
       });
       onSaved(res.path, data);
     } catch (e: any) {
@@ -451,6 +572,22 @@ export function QuoteEditor({ projectName, initial, onBack, onSaved }: Props) {
       </header>
 
       <div className="qe-hint qe-edit-only">{hint}</div>
+      {(mismatch.total || mismatch.tax) && (
+        <div className="dm-msg err qe-mismatch-warn" style={{ margin: "0 14px" }}>
+          {mismatch.total
+            ? `报价合计 ¥${formatMoney(total)} 与合同「总费用」${
+                formTotal != null ? `¥${formatMoney(formTotal)}` : ""
+              } 不一致`
+            : ""}
+          {mismatch.total && mismatch.tax ? "；" : ""}
+          {mismatch.tax
+            ? `税率文案（${parseTaxRateFromNote(data.taxNote) ?? "?"}%）与合同税率${
+                formTaxRate != null ? `${formTaxRate}%` : ""
+              } 不一致`
+            : ""}
+          。红色数字为提示，请改一致后再导出。
+        </div>
+      )}
       {err && (
         <div className="dm-msg err" style={{ margin: "0 14px" }}>
           {err}
@@ -560,41 +697,33 @@ export function QuoteEditor({ projectName, initial, onBack, onSaved }: Props) {
                     </td>
                     <td className="c-price">
                       <span className="qc-edit-wrap qe-edit-only">
-                        <span className="qc-prefix">¥</span>
-                        <input
-                          className="qc-cell-input qc-num"
-                          type="number"
-                          min={0}
-                          step={1}
+                        {row.unitPrice !== "/" && <span className="qc-prefix">¥</span>}
+                        <PriceInput
                           value={row.unitPrice}
-                          onChange={(e) =>
-                            updateRow(row.id, {
-                              unitPrice: parseFloat(e.target.value || "0") || 0,
-                            })
-                          }
+                          onCommit={(v) => updateRow(row.id, { unitPrice: v })}
                         />
                       </span>
-                      <span className="qc-static">¥{formatMoney(row.unitPrice)}</span>
+                      <span className="qc-static">{formatPrice(row.unitPrice)}</span>
                     </td>
                     <td className="c-partner">
                       <span className="qc-edit-wrap qe-edit-only">
-                        <span className="qc-prefix">¥</span>
-                        <input
-                          className="qc-cell-input qc-num"
-                          type="number"
-                          min={0}
-                          step={1}
+                        {row.partnerPrice !== "/" && <span className="qc-prefix">¥</span>}
+                        <PriceInput
                           value={row.partnerPrice}
-                          onChange={(e) =>
-                            updateRow(row.id, {
-                              partnerPrice: parseFloat(e.target.value || "0") || 0,
-                            })
-                          }
+                          onCommit={(v) => updateRow(row.id, { partnerPrice: v })}
                         />
                       </span>
                       <span className="qc-static">
-                        <span className="price-lg-symbol">¥</span>
-                        <span className="price-lg">{formatMoney(row.partnerPrice)}</span>
+                        {row.partnerPrice === "/" ? (
+                          "/"
+                        ) : (
+                          <>
+                            <span className="price-lg-symbol">¥</span>
+                            <span className="price-lg">
+                              {formatMoney(row.partnerPrice as number)}
+                            </span>
+                          </>
+                        )}
                       </span>
                     </td>
                     <td
@@ -730,18 +859,22 @@ export function QuoteEditor({ projectName, initial, onBack, onSaved }: Props) {
             </tbody>
             <tfoot>
               <tr>
-                <td className="foot-label" colSpan={4}>
+                <td className={`foot-label${mismatch.tax ? " qe-num-mismatch" : ""}`} colSpan={4}>
                   <input
-                    className="qc-cell-input"
+                    className={`qc-cell-input${mismatch.tax ? " qe-num-mismatch" : ""}`}
                     value={data.taxNote}
                     onChange={(e) => updateMeta({ taxNote: e.target.value })}
                     placeholder="总计（含税1%）"
                   />
-                  <span className="qc-static">{data.taxNote || "总计"}</span>
+                  <span className={`qc-static${mismatch.tax ? " qe-num-mismatch" : ""}`}>
+                    {data.taxNote || "总计"}
+                  </span>
                 </td>
-                <td className="foot-amount" colSpan={2}>
+                <td className={`foot-amount${mismatch.total ? " qe-num-mismatch" : ""}`} colSpan={2}>
                   <span className="price-lg-symbol">¥</span>
-                  <span className="price-lg">{formatMoney(total)}</span>
+                  <span className={`price-lg${mismatch.total ? " qe-num-mismatch" : ""}`}>
+                    {formatMoney(total)}
+                  </span>
                 </td>
                 <td className="foot-note" colSpan={2}>
                   <input

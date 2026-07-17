@@ -14,6 +14,8 @@ from typing import Dict, List, Optional
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 
 
@@ -273,19 +275,39 @@ class TemplateProcessor:
         usable = max(usable - int(Inches(0.05)), int(Inches(1)))
         return usable
 
+    def _reset_paragraph_for_image(self, para):
+        """清空占位段并重建为纯居中段落（清除 WPS 段落布局/样式/缩进）。
+
+        模板占位段可能带 Footer 样式、左缩进、framePr（段落布局）或权限标记，
+        仅改 alignment 在 WPS 下仍可能偏左。此处等价于：清除段落布局 →
+        去掉特殊样式 → 居中 → 再插入图片。
+        """
+        p = para._p
+        # 去掉 pPr 以外的全部子节点（runs / permStart / permEnd 等）
+        for child in list(p):
+            if child.tag != qn("w:pPr"):
+                p.remove(child)
+        # 重建干净的 pPr：仅保留居中
+        old_pPr = p.find(qn("w:pPr"))
+        if old_pPr is not None:
+            p.remove(old_pPr)
+        pPr = p.get_or_add_pPr()
+        jc = OxmlElement("w:jc")
+        jc.set(qn("w:val"), "center")
+        pPr.append(jc)
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     def _insert_image(self, doc, img_path: str):
-        """插入费用表格图片，宽度自适应页面正文宽度，高度按比例缩放。"""
+        """插入费用表格图片，宽度自适应页面正文宽度，高度按比例缩放，段落居中。"""
         width = self._content_width_emu(doc)
 
         def place_in_paragraph(para) -> bool:
             if "替换的费用表格图片" not in para.text:
                 return False
-            for run in para.runs:
-                run.text = ""
+            self._reset_paragraph_for_image(para)
             run = para.add_run()
-            # 只设 width 时 python-docx 保持原图宽高比
+            # 只设 width 时 python-docx 保持原图宽高比（inline，非浮动）
             run.add_picture(img_path, width=width)
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             return True
 
         for para in doc.paragraphs:

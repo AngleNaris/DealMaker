@@ -16,13 +16,50 @@ export function loadSettings() {
   return backend<Record<string, string>>("load_settings");
 }
 
-/** 启动一次加载 settings + contacts + projects，减少进程冷启动 */
+/** 启动一次加载 settings + contacts + projects + workspace */
 export function bootstrap() {
   return backend<{
     settings: Record<string, string>;
     contacts: { names: string[]; contacts: Record<string, string>[] };
     projects: ProjectSummary[];
+    workspace?: WorkspaceState;
+    workspace_meta?: WorkspaceMeta;
   }>("bootstrap");
+}
+
+export type WorkspaceState = {
+  form: Record<string, string>;
+  quote?: unknown;
+  ratio?: number;
+  template_path?: string;
+  output_dir?: string;
+  output_name?: string;
+  selected_project_id?: string;
+  selected_contact?: string;
+  rev?: number;
+  updated_by?: string;
+};
+
+export type WorkspaceMeta = {
+  path: string;
+  exists: boolean;
+  mtime: number;
+  size: number;
+  rev: number;
+  updated_by?: string;
+};
+
+export function getWorkspace() {
+  return backend<WorkspaceState>("workspace_get");
+}
+
+export function workspaceMeta() {
+  return backend<WorkspaceMeta>("workspace_meta");
+}
+
+/** GUI 全量写入，与 CLI 共编 */
+export function putWorkspace(workspace: WorkspaceState, updated_by = "gui") {
+  return backend<WorkspaceState>("workspace_put", { workspace, updated_by });
 }
 
 export function saveSettings(settings: Record<string, string>) {
@@ -133,7 +170,25 @@ export function deleteProject(id: string) {
   return backend<{ projects: ProjectSummary[] }>("delete_project", { id });
 }
 
-/** 用本机 Chrome/Edge 渲染 HTML 导出 PNG（清晰度接近浏览器截图） */
+/** 后端导出报价 PNG（与 CLI 相同：浏览器 Edge→Chrome→Firefox 截图+裁白边） */
+export async function exportQuotePng(params: {
+  quote: unknown;
+  filename?: string;
+  projectName?: string;
+  contractNo?: string;
+}): Promise<{ path: string; size: number; engine?: string; trimmed?: boolean }> {
+  return backend<{ path: string; size: number; engine?: string; trimmed?: boolean }>(
+    "export_quote_png",
+    {
+      quote: params.quote,
+      filename: params.filename || "",
+      project_name: params.projectName || "",
+      contract_no: params.contractNo || "",
+    }
+  );
+}
+
+/** @deprecated 旧浏览器截图路径，保留兼容 */
 export async function exportQuoteHtmlPng(params: {
   html: string;
   filename?: string;

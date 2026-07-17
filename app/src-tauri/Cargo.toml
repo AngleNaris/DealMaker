@@ -1,6 +1,6 @@
 [package]
 name = "dealmaker"
-version = "2.1.1"
+version = "2.1.4"
 description = "DealMaker 合同生成工具"
 edition = "2021"
 

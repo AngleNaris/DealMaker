@@ -58,6 +58,8 @@ app/src-tauri/gen/
 .claude/
 .cursor/
 .grok/
+.workbuddy/
+mcps/
 
 # OS
 Thumbs.db

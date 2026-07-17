@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   amountToChinese,
@@ -8,8 +8,15 @@ import {
   splitByRatio,
 } from "./lib/amount";
 import * as api from "./lib/api";
-import type { ProjectSummary } from "./lib/api";
-import { QuoteData, clearQuoteDraft, loadQuoteDraft, saveQuoteDraft } from "./lib/quote";
+import type { ProjectSummary, WorkspaceState } from "./lib/api";
+import {
+  QuoteData,
+  clearQuoteDraft,
+  defaultQuote,
+  loadQuoteDraft,
+  quoteFormMismatch,
+  saveQuoteDraft,
+} from "./lib/quote";
 import { QuoteEditor } from "./components/QuoteEditor";
 import { APP_VERSION } from "./version";
 
@@ -124,6 +131,41 @@ export function App() {
   const [quoteDraft, setQuoteDraft] = useState<QuoteData | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  /** 与 CLI/AI 共享工作区：rev 用于探测外部更新 */
+  const workspaceRevRef = useRef(0);
+  const skipWorkspacePushRef = useRef(false);
+  const [quoteSyncKey, setQuoteSyncKey] = useState(0);
+  const [coeditHint, setCoeditHint] = useState("");
+
+  const applyWorkspaceState = useCallback((ws: WorkspaceState, opts?: { silent?: boolean }) => {
+    skipWorkspacePushRef.current = true;
+    workspaceRevRef.current = typeof ws.rev === "number" ? ws.rev : 0;
+    const nextForm = emptyForm();
+    const src = ws.form || {};
+    for (const k of Object.keys(nextForm)) {
+      if (src[k] != null) nextForm[k] = String(src[k]);
+    }
+    for (const [k, v] of Object.entries(src)) {
+      nextForm[k] = String(v ?? "");
+    }
+    setForm(nextForm);
+    if (typeof ws.ratio === "number" && Number.isFinite(ws.ratio)) setRatio(ws.ratio);
+    if (ws.template_path) setTemplatePath(ws.template_path);
+    if (ws.output_dir != null) setOutputDir(ws.output_dir);
+    if (ws.output_name != null) setOutputName(ws.output_name);
+    if (ws.selected_project_id != null) setSelectedProjectId(ws.selected_project_id || "");
+    if (ws.selected_contact != null) setSelectedContact(ws.selected_contact || "");
+    if (ws.quote && typeof ws.quote === "object") {
+      const q = ws.quote as QuoteData;
+      setQuoteDraft(q);
+      saveQuoteDraft(q);
+      setQuoteSyncKey((n) => n + 1);
+    }
+    if (!opts?.silent && ws.updated_by && ws.updated_by !== "gui") {
+      setCoeditHint(`已同步外部编辑（${ws.updated_by}）· rev ${ws.rev ?? 0}`);
+      setMsg({ type: "info", text: `工作区已更新（来自 ${ws.updated_by}）` });
+    }
+  }, []);
 
   const payMismatch = useMemo(() => {
     const total = parseAmount(form["替换的总费用"] || "");
@@ -134,6 +176,38 @@ export function App() {
     if (amountsEqual(sum, total)) return null;
     return { total, prepaid, finalPay, sum, diff: Math.round((total - sum) * 100) / 100 };
   }, [form]);
+
+  /** 费用信息 vs 报价表 总费用/税率 是否不一致 */
+  const feeQuoteMismatch = useMemo(() => {
+    const q = quoteDraft || loadQuoteDraft();
+    const formTotal = parseAmount(form["替换的总费用"] || "");
+    const formTax = parseAmount(form["替换的税率"] || "");
+    return quoteFormMismatch(q, formTotal, formTax);
+  }, [quoteDraft, form]);
+
+  const openQuoteEditor = () => {
+    const existing = quoteDraft || loadQuoteDraft();
+    const hasContent =
+      existing &&
+      existing.rows?.some(
+        (r) =>
+          (r.name && r.name.trim()) ||
+          (Number(r.partnerPrice) || 0) > 0 ||
+          (Number(r.unitPrice) || 0) > 0 ||
+          (r.specs && r.specs.length > 0)
+      );
+    if (!hasContent) {
+      const seeded = defaultQuote({
+        projectName: form["替换的项目名称"] || "",
+        formTotal: parseAmount(form["替换的总费用"] || ""),
+        formTaxRate: parseAmount(form["替换的税率"] || ""),
+      });
+      setQuoteDraft(seeded);
+      saveQuoteDraft(seeded);
+      setQuoteSyncKey((n) => n + 1);
+    }
+    setView("quote");
+  };
 
   const applyAmountChinese = useCallback((key: string, text: string, prev: Record<string, string>) => {
     const next = { ...prev, [key]: text };
@@ -271,11 +345,78 @@ export function App() {
         if (settings.output_dir) setOutputDir(settings.output_dir);
         applyContactsResult(boot.contacts || {});
         setProjects(boot.projects || []);
+        // 与 CLI 共享工作区：启动时载入
+        if (boot.workspace && (boot.workspace.rev || 0) > 0) {
+          applyWorkspaceState(boot.workspace, { silent: true });
+          setCoeditHint(`已加载共享工作区 rev ${boot.workspace.rev}`);
+        } else if (boot.workspace) {
+          workspaceRevRef.current = boot.workspace.rev || 0;
+        }
       } catch (e: any) {
         setMsg({ type: "err", text: String(e?.message || e) });
       }
     })();
-  }, []);
+  }, [applyWorkspaceState]);
+
+  // GUI → 工作区：用户编辑后防抖写入，供 AI CLI 读取
+  useEffect(() => {
+    if (skipWorkspacePushRef.current) {
+      skipWorkspacePushRef.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const quote = quoteDraft || loadQuoteDraft();
+      const body: WorkspaceState = {
+        form,
+        quote: quote || undefined,
+        ratio,
+        template_path: templatePath,
+        output_dir: outputDir,
+        output_name: outputName,
+        selected_project_id: selectedProjectId,
+        selected_contact: selectedContact,
+      };
+      void api
+        .putWorkspace(body, "gui")
+        .then((ws) => {
+          if (typeof ws.rev === "number") workspaceRevRef.current = ws.rev;
+        })
+        .catch((e) => console.warn("workspace put failed", e));
+    }, 450);
+    return () => window.clearTimeout(t);
+  }, [
+    form,
+    ratio,
+    templatePath,
+    outputDir,
+    outputName,
+    quoteDraft,
+    selectedProjectId,
+    selectedContact,
+  ]);
+
+  // CLI/AI → GUI：轮询 rev，实时显示外部编辑
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const meta = await api.workspaceMeta();
+        if (!alive) return;
+        if ((meta.rev || 0) > workspaceRevRef.current) {
+          const ws = await api.getWorkspace();
+          if (!alive) return;
+          applyWorkspaceState(ws);
+        }
+      } catch {
+        /* 轮询失败忽略 */
+      }
+    };
+    const id = window.setInterval(tick, 900);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [applyWorkspaceState]);
 
   const persistSettings = async (tpl: string, out: string) => {
     try {
@@ -533,7 +674,11 @@ export function App() {
   if (view === "quote") {
     return (
       <QuoteEditor
+        key={quoteSyncKey}
         projectName={form["替换的项目名称"] || ""}
+        contractNo={form["替换的合同编号"] || ""}
+        formTotal={parseAmount(form["替换的总费用"] || "")}
+        formTaxRate={parseAmount(form["替换的税率"] || "")}
         initial={quoteDraft}
         onBack={(draft) => {
           setQuoteDraft(draft);
@@ -557,6 +702,15 @@ export function App() {
     <div className="dm-root">
       <header className="dm-titlebar">
         <div className="dm-author">@繁星之子卡萨蒂亚</div>
+        {coeditHint ? (
+          <div className="dm-coedit-hint" title="GUI 与 AI CLI 共享 .contract_tool/workspace.json">
+            {coeditHint}
+          </div>
+        ) : (
+          <div className="dm-coedit-hint dim" title="同一 DealMaker.exe 带参数即为 CLI，与界面共编">
+            AI 共编就绪
+          </div>
+        )}
       </header>
 
       <div className="dm-body">
@@ -700,10 +854,21 @@ export function App() {
                     <div className="dm-field-line">
                       <input
                         type="text"
-                        className="dm-input grow"
+                        className={`dm-input grow${
+                          (f.key === "替换的总费用" && feeQuoteMismatch.total) ||
+                          (f.key === "替换的税率" && feeQuoteMismatch.tax)
+                            ? " dm-input-mismatch"
+                            : ""
+                        }`}
                         value={form[f.key] || ""}
                         placeholder={f.placeholder}
                         onChange={(e) => setField(f.key, e.target.value)}
+                        title={
+                          (f.key === "替换的总费用" && feeQuoteMismatch.total) ||
+                          (f.key === "替换的税率" && feeQuoteMismatch.tax)
+                            ? "与报价表中的合计/税率不一致"
+                            : undefined
+                        }
                       />
                       {f.pick === "image" && (
                         <>
@@ -713,7 +878,7 @@ export function App() {
                           <button
                             type="button"
                             className="dm-btn dm-btn-outline"
-                            onClick={() => setView("quote")}
+                            onClick={openQuoteEditor}
                           >
                             制作报价表
                           </button>

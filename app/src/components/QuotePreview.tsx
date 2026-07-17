@@ -2,6 +2,7 @@ import React, { forwardRef } from "react";
 import {
   QuoteData,
   formatMoney,
+  formatPrice,
   labeledSpecTags,
   qtyLabel,
   sumPartner,
@@ -46,10 +47,18 @@ export const QuotePreview = forwardRef<HTMLDivElement, Props>(function QuotePrev
                 <td className="c-name">{row.name || "—"}</td>
                 <td className="c-qty">{qtyLabel(row.qty)}</td>
                 <td className="c-dur">{row.duration || "/"}</td>
-                <td className="c-price">¥{formatMoney(row.unitPrice)}</td>
+                <td className="c-price">{formatPrice(row.unitPrice)}</td>
                 <td className="c-partner">
-                  <span className="price-lg-symbol">¥</span>
-                  <span className="price-lg">{formatMoney(row.partnerPrice)}</span>
+                  {row.partnerPrice === "/" ? (
+                    "/"
+                  ) : (
+                    <>
+                      <span className="price-lg-symbol">¥</span>
+                      <span className="price-lg">
+                        {formatMoney(row.partnerPrice as number)}
+                      </span>
+                    </>
+                  )}
                 </td>
                 <td className="c-spec">
                   {tags.length > 0 ? (

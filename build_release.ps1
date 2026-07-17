@@ -30,7 +30,7 @@ if (-not $pyi) {
   pip install pyinstaller -q
 }
 
-Write-Host "==> [2/5] Pack Python backend (dealmaker-backend.exe)..." -ForegroundColor Cyan
+Write-Host "==> [2/5] Pack Python backend (embedded in DealMaker.exe)..." -ForegroundColor Cyan
 $backendSpec = Join-Path $Root "backend\dealmaker-backend.spec"
 Push-Location $Root
 pyinstaller --noconfirm --clean --distpath "$Root\dist_backend" --workpath "$Root\build_backend" $backendSpec
@@ -76,6 +76,7 @@ $portable = Join-Path $Root "release\portable"
 if (Test-Path $portable) { Remove-Item $portable -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $portable | Out-Null
 Copy-Item $releaseExe (Join-Path $portable "DealMaker.exe") -Force
+# 单 exe：GUI + Agent CLI 同一 DealMaker.exe（双击=界面，参数=CLI）
 
 $outNsis = Join-Path $Root "release"
 New-Item -ItemType Directory -Force -Path $outNsis | Out-Null
@@ -98,9 +99,11 @@ $exeSize = [math]::Round((Get-Item (Join-Path $portable "DealMaker.exe")).Length
 Write-Host ""
 Write-Host "Done. DealMaker v$AppVersion" -ForegroundColor Green
 Write-Host "Portable (single file): $portable"
-Write-Host "  - DealMaker.exe  ($exeSize MB)  embeds backend + officecli"
+Write-Host "  - DealMaker.exe  ($exeSize MB)  GUI + Agent CLI"
+Write-Host "    double-click = GUI;  DealMaker.exe help = AI CLI"
 Write-Host "Runtime deps extract to: %LOCALAPPDATA%\DealMaker\runtime\"
 Write-Host "  - .version=$AppVersion; upgrade overwrites deps"
 Write-Host "Template: NOT embedded (pick in UI or place next to exe)"
 Write-Host "User data: exe-side .contract_tool/"
+Write-Host "Agent: DealMaker.exe help  |  docs: AGENTS.md"
 Write-Host "PDF: system WPS/Word; quote PNG: Edge/Chrome"

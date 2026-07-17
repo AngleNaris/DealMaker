@@ -42,6 +42,13 @@ from backend.core import (
     save_settings,
     split_by_ratio,
 )
+from backend.schema import full_schema
+from backend.workspace import (
+    load_workspace,
+    merge_workspace,
+    replace_workspace,
+    workspace_meta,
+)
 
 
 def _ok(data: Any = None) -> Dict[str, Any]:
@@ -106,7 +113,7 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return _ok(settings)
 
     if action == "bootstrap":
-        """启动一次加载 settings + contacts + projects，减少进程冷启动次数。"""
+        """启动一次加载 settings + contacts + projects + workspace。"""
         settings = load_settings()
         tpl = (settings.get("template_path") or "").strip()
         if not tpl or not os.path.isfile(tpl):
@@ -124,8 +131,34 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                     "contacts": cm.contacts,
                 },
                 "projects": store.list_summaries(),
+                "workspace": load_workspace(),
+                "workspace_meta": workspace_meta(),
             }
         )
+
+    if action == "schema":
+        return _ok(full_schema())
+
+    if action == "workspace_get":
+        return _ok(load_workspace())
+
+    if action == "workspace_meta":
+        return _ok(workspace_meta())
+
+    if action == "workspace_put":
+        """GUI 全量写入工作区，供 CLI/AI 与界面共编。"""
+        body = payload.get("workspace") or payload
+        updated_by = str(payload.get("updated_by") or "gui")
+        if not isinstance(body, dict):
+            return _err("workspace_put 需要对象")
+        return _ok(replace_workspace(body, updated_by=updated_by))
+
+    if action == "workspace_merge":
+        body = payload.get("workspace") or payload
+        updated_by = str(payload.get("updated_by") or "gui")
+        if not isinstance(body, dict):
+            return _err("workspace_merge 需要对象")
+        return _ok(merge_workspace(body, updated_by=updated_by))
 
     if action == "save_settings":
         save_settings(payload.get("settings") or payload)
@@ -223,17 +256,49 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             return _err("项目不存在")
         return _ok({"projects": store.list_summaries()})
 
+    if action == "export_quote_png":
+        """Pillow 本地绘制报价 PNG（不依赖浏览器）。"""
+        from backend.core import get_config_dir
+        from backend.quote import export_quote_png, quote_png_filename
+
+        quote = payload.get("quote") or payload.get("data") or {}
+        filename = (payload.get("filename") or "").strip()
+        project_name = str(payload.get("project_name") or payload.get("projectName") or "")
+        contract_no = str(payload.get("contract_no") or payload.get("contractNo") or "")
+        out = (payload.get("out") or payload.get("path") or "").strip()
+        try:
+            if not out:
+                if not filename:
+                    filename = quote_png_filename(project_name, contract_no)
+                filename = os.path.basename(filename).replace("..", "")
+                if not filename.lower().endswith(".png"):
+                    filename += ".png"
+                out = os.path.join(get_config_dir(), "quotes", filename)
+            info = export_quote_png(
+                quote if isinstance(quote, dict) else {},
+                out,
+                project_name=project_name,
+                contract_no=contract_no,
+            )
+            return _ok(info)
+        except Exception as e:
+            return _err(str(e))
+
     if action == "save_quote_image":
-        """保存报价表 PNG（base64）到 .contract_tool/quotes/"""
+        """保存报价表 PNG（base64）到 .contract_tool/quotes/（同项目名覆盖）"""
         import base64
-        from datetime import datetime
+
+        from backend.quote import quote_png_filename
 
         b64 = payload.get("base64") or ""
         filename = (payload.get("filename") or "").strip()
         if not b64:
             return _err("缺少图片数据")
         if not filename:
-            filename = f"报价表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            filename = quote_png_filename(
+                str(payload.get("project_name") or payload.get("projectName") or ""),
+                str(payload.get("contract_no") or payload.get("contractNo") or ""),
+            )
         # 安全文件名
         filename = os.path.basename(filename).replace("..", "")
         if not filename.lower().endswith(".png"):
@@ -289,10 +354,30 @@ def dispatch(action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print(json.dumps(_err("用法: python -m backend.cli <action> [json]"), ensure_ascii=False))
+        print(
+            json.dumps(
+                _err(
+                    "用法: python -m backend.cli <action> [json] "
+                    "或 Agent: python -m backend.agent <command> ..."
+                ),
+                ensure_ascii=False,
+            )
+        )
         return 1
 
     action = sys.argv[1]
+
+    # Agent CLI：子命令 或 agent 前缀（与 GUI 共用同一后端 exe）
+    try:
+        from backend.agent import AGENT_ROOT_COMMANDS, main as agent_main
+
+        if action == "agent":
+            return agent_main(sys.argv[2:])
+        if action in AGENT_ROOT_COMMANDS:
+            return agent_main(sys.argv[1:])
+    except Exception:
+        pass
+
     try:
         if len(sys.argv) >= 3:
             payload = json.loads(sys.argv[2])

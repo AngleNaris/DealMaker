@@ -1,14 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller: 将业务后端打成单文件 exe（含 python-docx）
-import sys
+# Agent CLI 单文件：dealmaker-cli.exe（避免与 GUI DealMaker.exe 在 Windows 上撞名）
 from pathlib import Path
 
-# SPECPATH = 含 .spec 的目录，即 backend/
 BACKEND = Path(SPECPATH).resolve()
-ROOT = BACKEND.parent  # DealMaker/
+ROOT = BACKEND.parent
 
 a = Analysis(
-    [str(BACKEND / "run_cli.py")],
+    [str(BACKEND / "run_agent.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=[],
@@ -19,12 +17,12 @@ a = Analysis(
         "lxml",
         "lxml.etree",
         "lxml._elementpath",
-        "PIL",
-        "PIL.Image",
         "backend.agent",
         "backend.schema",
         "backend.workspace",
         "backend.quote",
+        "backend.core",
+        "backend.cli",
     ],
     hookspath=[],
     hooksconfig={},
@@ -41,15 +39,11 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="dealmaker-backend",
+    name="dealmaker-cli",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    console=True,  # 后台子进程，保留 console 便于排错（窗口隐藏由父进程控制）
+    upx=False,
+    console=True,
     disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
 )

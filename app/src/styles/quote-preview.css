@@ -467,3 +467,15 @@
   touch-action: none;
   cursor: grab;
 }
+
+/* 与合同费用信息不一致时标红 */
+.qe-num-mismatch,
+.qe-num-mismatch .price-lg,
+input.qe-num-mismatch,
+.foot-amount.qe-num-mismatch,
+.foot-label.qe-num-mismatch {
+  color: #c62828 !important;
+}
+.qe-mismatch-warn {
+  font-size: 12px;
+}

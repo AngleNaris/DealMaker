@@ -1,4 +1,6 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// 使用 console 子系统，使 DealMaker.exe 可作为 CLI 输出 JSON；
+// 启动 GUI 时再 FreeConsole，避免用户看到黑框常驻。
+// （发布为单 exe：双击=界面，带参数=Agent CLI）
 
 use serde_json::Value;
 use std::fs;
@@ -79,8 +81,21 @@ fn write_dep_file(path: &Path, data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// 运行时标记：版本 + 内嵌 backend 字节数。
+/// 同版本热修也会因 backend 体积变化而重新解压，避免 LocalAppData 残留旧逻辑。
+fn runtime_marker() -> String {
+    #[cfg(not(debug_assertions))]
+    {
+        format!("{}:{}", APP_VERSION, EMBEDDED_BACKEND.len())
+    }
+    #[cfg(debug_assertions)]
+    {
+        APP_VERSION.to_string()
+    }
+}
+
 /// 确保 LocalAppData 中有与当前主程序版本匹配的 backend / officecli。
-/// 版本变化或文件缺失时自动覆盖。模板不内嵌、不写入此处。
+/// 版本/内嵌体积变化或文件缺失时自动覆盖。模板不内嵌、不写入此处。
 fn ensure_runtime_deps() -> Result<PathBuf, String> {
     let dir = local_runtime_dir()?;
     fs::create_dir_all(&dir).map_err(|e| format!("创建 runtime 目录失败: {e}"))?;
@@ -92,7 +107,8 @@ fn ensure_runtime_deps() -> Result<PathBuf, String> {
         .unwrap_or_default()
         .trim()
         .to_string();
-    let ready = installed == APP_VERSION && backend.is_file() && officecli.is_file();
+    let want = runtime_marker();
+    let ready = installed == want && backend.is_file() && officecli.is_file();
     if ready {
         return Ok(dir);
     }
@@ -101,7 +117,7 @@ fn ensure_runtime_deps() -> Result<PathBuf, String> {
     {
         write_dep_file(&backend, EMBEDDED_BACKEND)?;
         write_dep_file(&officecli, EMBEDDED_OFFICECLI)?;
-        fs::write(&ver_path, APP_VERSION).map_err(|e| format!("写入版本标记失败: {e}"))?;
+        fs::write(&ver_path, &want).map_err(|e| format!("写入版本标记失败: {e}"))?;
         return Ok(dir);
     }
 
@@ -133,7 +149,7 @@ fn ensure_runtime_deps() -> Result<PathBuf, String> {
             fs::copy(&src, &officecli).map_err(|e| format!("复制 officecli 失败: {e}"))?;
         }
         if backend.is_file() && officecli.is_file() {
-            fs::write(&ver_path, APP_VERSION).map_err(|e| format!("写入版本标记失败: {e}"))?;
+            fs::write(&ver_path, &want).map_err(|e| format!("写入版本标记失败: {e}"))?;
         }
         Ok(dir)
     }
@@ -145,6 +161,120 @@ fn hide_console(cmd: &mut Command) {
         use std::os::windows::process::CommandExt;
         // CREATE_NO_WINDOW
         cmd.creation_flags(0x0800_0000);
+    }
+}
+
+/// Agent CLI 子命令（与 backend.agent.AGENT_ROOT_COMMANDS 对齐）
+const AGENT_COMMANDS: &[&str] = &[
+    "help",
+    "skill",
+    "schema",
+    "ping",
+    "help-json",
+    "workspace",
+    "settings",
+    "form",
+    "contact",
+    "project",
+    "quote",
+    "amount",
+    "generate",
+];
+
+/// 是否以 CLI 模式启动（单 exe 双模式）
+/// - 无参数 / 仅 Tauri 内部参数 → GUI
+/// - help / project list / --cli ... → Agent CLI
+fn parse_agent_cli_args(args: &[String]) -> Option<Vec<String>> {
+    if args.is_empty() {
+        return None;
+    }
+    let first = args[0].as_str();
+    // 显式前缀
+    if first == "--cli" || first == "cli" || first == "agent" {
+        let rest: Vec<String> = args[1..].to_vec();
+        if rest.is_empty() {
+            return Some(vec!["help".into()]);
+        }
+        return Some(rest);
+    }
+    // 直接子命令：DealMaker.exe project list
+    if AGENT_COMMANDS.contains(&first) || first == "-h" || first == "--help" {
+        if first == "-h" || first == "--help" {
+            return Some(vec!["help".into()]);
+        }
+        return Some(args.to_vec());
+    }
+    None
+}
+
+#[cfg(windows)]
+fn free_console() {
+    unsafe {
+        extern "system" {
+            fn FreeConsole() -> i32;
+        }
+        FreeConsole();
+    }
+}
+
+/// 单 exe CLI：确保依赖后调用内置 backend 的 agent 子命令，stdio 透传
+fn run_agent_cli(cli_args: &[String]) -> i32 {
+    let root = project_root();
+    let payload_env = root.to_string_lossy().to_string();
+    let runtime = match ensure_runtime_deps() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{{\"ok\":false,\"error\":\"{e}\"}}");
+            return 1;
+        }
+    };
+    let runtime_env = runtime.to_string_lossy().to_string();
+
+    let force_exe = std::env::var("DEALMAKER_FORCE_EXE").ok().as_deref() == Some("1");
+    let prefer_python = cfg!(debug_assertions) && !force_exe;
+
+    let mut cmd = if !prefer_python {
+        let backend = runtime.join("dealmaker-backend.exe");
+        if !backend.is_file() {
+            eprintln!(
+                "{{\"ok\":false,\"error\":\"未找到后端 {}\"}}",
+                backend.display()
+            );
+            return 1;
+        }
+        let mut c = Command::new(backend);
+        c.args(cli_args);
+        c
+    } else {
+        let py = std::env::var("DEALMAKER_PYTHON").unwrap_or_else(|_| "python".into());
+        let pythonpath = match std::env::var("PYTHONPATH") {
+            Ok(existing) if !existing.is_empty() => format!("{};{}", root.display(), existing),
+            _ => root.display().to_string(),
+        };
+        let mut c = Command::new(py);
+        c.env("PYTHONPATH", pythonpath);
+        // python -m backend.agent <args>
+        let mut args = vec!["-m".into(), "backend.agent".into()];
+        args.extend(cli_args.iter().cloned());
+        c.args(args);
+        c
+    };
+
+    cmd.current_dir(&root)
+        .env("DEALMAKER_ROOT", &payload_env)
+        .env("DEALMAKER_RUNTIME", &runtime_env)
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUTF8", "1")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    match cmd.status() {
+        Ok(st) => st.code().unwrap_or(1),
+        Err(e) => {
+            eprintln!("{{\"ok\":false,\"error\":\"启动 CLI 失败: {e}\"}}");
+            1
+        }
     }
 }
 
@@ -261,7 +391,7 @@ fn quotes_dir() -> Result<PathBuf, String> {
 }
 
 fn safe_png_name(filename: Option<String>) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    // 默认稳定名；同项目重复导出由调用方传入「项目名_合同编号.png」覆盖
     filename
         .filter(|s| !s.trim().is_empty())
         .map(|s| {
@@ -269,20 +399,14 @@ fn safe_png_name(filename: Option<String>) -> String {
             let n = std::path::Path::new(&n)
                 .file_name()
                 .map(|f| f.to_string_lossy().to_string())
-                .unwrap_or_else(|| "quote.png".into());
+                .unwrap_or_else(|| "报价表.png".into());
             if n.to_lowercase().ends_with(".png") {
                 n
             } else {
                 format!("{n}.png")
             }
         })
-        .unwrap_or_else(|| {
-            let ts = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            format!("报价表_{ts}.png")
-        })
+        .unwrap_or_else(|| "报价表.png".into())
 }
 
 fn find_chromium() -> Result<PathBuf, String> {
@@ -485,6 +609,17 @@ fn pick_path(kind: String) -> Result<Option<String>, String> {
 }
 
 fn main() {
+    // 单 exe 双模式：带 Agent 子命令 → CLI；否则 → GUI
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(cli_args) = parse_agent_cli_args(&args) {
+        let code = run_agent_cli(&cli_args);
+        std::process::exit(code);
+    }
+
+    // GUI：释放控制台，避免双击启动时挂着黑框
+    #[cfg(windows)]
+    free_console();
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             backend_call,

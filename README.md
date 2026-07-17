@@ -40,7 +40,7 @@
 4. 填写字段 → 生成 DOCX 或导出 PDF
 
 > **PDF 导出**需要本机已安装 **WPS** 或 **Microsoft Word**（优先使用 WPS）。  
-> **报价表截图**使用系统自带的 Edge 或 Chrome。
+> **报价表图片**：自动找本机浏览器截图（优先 Edge，其次 Chrome，最后 Firefox），2× 清晰度并裁白边。
 
 数据保存在程序同级目录的 `.contract_tool/`（联系人、历史项目、设置），换机器时可一并拷贝。
 
@@ -54,7 +54,7 @@
 | **联系人** | 仅保存**乙方**信息（名称、银行、代表、地址），**不会**覆盖合同编号、费用等项目字段 |
 | **预付款比例** | 默认 50%，改总费用或比例时自动拆分预付 / 尾款 |
 | **金额大写** | 填写数字金额后自动生成中文大写，可再手改 |
-| **制作报价表** | 在费用表格处进入报价编辑，导出图片后自动填入「费用表格图片」 |
+| **制作报价表** | 在费用表格处进入报价编辑，导出图片后自动填入「费用表格图片」；文件名为「项目名称_合同编号.png」，同项目再次导出覆盖 |
 
 建议流程：选模板 → 加载联系人（可选）→ 填项目与费用 → 保存项目 → 生成文档。
 
@@ -173,22 +173,29 @@ npm install
 ## 开发与发布
 
 ```powershell
+# GUI 开发
+.\dev.bat
+
 # 开发
 .\dev.bat
-# 或
-cd app
-npm run tauri dev
+.\dealmaker.cmd help          # 等同发布版 DealMaker.exe help
 
-# 发布（单文件便携版 + 可选安装包）
+# 发布（单文件）
 .\build_release.ps1
 ```
 
 | 产出 | 说明 |
 |------|------|
-| `release/portable/DealMaker.exe` | 单文件；内嵌 backend 与 officecli |
-| `release/DealMaker_*_setup.exe` | NSIS 安装包 |
+| `release/portable/DealMaker.exe` | **唯一用户文件**：双击=GUI，带参数=Agent CLI |
+| `release/DealMaker_*_setup.exe` | 可选安装包 |
 
-运行时依赖解压到 `%LOCALAPPDATA%\DealMaker\runtime\`，版本升级时自动覆盖。
+```text
+DealMaker.exe                 → 图形界面
+DealMaker.exe help            → AI / 自动化 CLI（内置 Skill）
+DealMaker.exe project list    → 与界面共编
+```
+
+运行时依赖解压到 `%LOCALAPPDATA%\DealMaker\runtime\`。详见 **[AGENTS.md](./AGENTS.md)**。
 
 ## 版本号
 
